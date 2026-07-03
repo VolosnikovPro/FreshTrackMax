@@ -1,0 +1,58 @@
+from sqlalchemy import Float, Date, ForeignKey, DateTime, func, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.db.database import Base
+import datetime
+
+
+class RawMaterialCost(Base):
+    """Manual cost per unit for a product (entered by nutrition_manager)."""
+    __tablename__ = "raw_material_costs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    cost_per_unit: Mapped[float] = mapped_column(Float)       # in rubles
+    currency: Mapped[str] = mapped_column(default="RUB")
+    effective_date: Mapped[datetime.date] = mapped_column(Date, index=True)
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    product = relationship("Product", back_populates="costs")
+    updated_by_user = relationship("User", back_populates="costs")
+
+
+class DailyConsumption(Base):
+    """Daily manual consumption entry for a product."""
+    __tablename__ = "daily_consumptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    date: Mapped[datetime.date] = mapped_column(Date, index=True)
+    quantity_used: Mapped[float] = mapped_column(Float)
+    unit: Mapped[str] = mapped_column(default="kg")
+    entered_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    product = relationship("Product", back_populates="consumptions")
+    entered_by_user = relationship("User", back_populates="consumptions")
+
+
+class DailyHeadcount(Base):
+    """Daily number of people being fed (entered by manager)."""
+    __tablename__ = "daily_headcounts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    date: Mapped[datetime.date] = mapped_column(Date, unique=True, index=True)
+    count: Mapped[int]
+    entered_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    entered_by_user = relationship("User", back_populates="headcounts")

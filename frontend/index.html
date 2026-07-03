@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#2563EB" />
+    <script>
+      if (location.hash.startsWith("#WebAppData") || sessionStorage.getItem("WebAppData")) {
+        const s = document.createElement("script");
+        s.src = "https://st.max.ru/js/max-web-app.js";
+        document.head.appendChild(s);
+      }
+    </script>
+    <title>FreshTrack</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      html { height: -webkit-fill-available; }
+      body {
+        margin: 0;
+        font-family: 'Onest', system-ui, -apple-system, sans-serif;
+        background: #F5F7FA;
+        color: #0F1923;
+        -webkit-font-smoothing: antialiased;
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
+        overscroll-behavior: none;
+      }
+      #root { min-height: 100vh; min-height: -webkit-fill-available; }
+      input, select, button, textarea { font-family: inherit; }
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 2px; }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

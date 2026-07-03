@@ -1,0 +1,3 @@
+git+https://github.com/AnnushkaStark/aiomax.git@cbb0f52c2cba8e01d87babf1cdb6b7a91906f616
+fastapi
+uvicorn
