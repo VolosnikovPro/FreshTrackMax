@@ -9,8 +9,9 @@ class RawMaterialCost(Base):
     __tablename__ = "raw_material_costs"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"), index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
-    cost_per_unit: Mapped[float] = mapped_column(Float)       # in rubles
+    cost_per_unit: Mapped[float] = mapped_column(Float)
     currency: Mapped[str] = mapped_column(default="RUB")
     effective_date: Mapped[datetime.date] = mapped_column(Date, index=True)
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -20,6 +21,7 @@ class RawMaterialCost(Base):
     )
 
     product = relationship("Product", back_populates="costs")
+    site = relationship("Site", back_populates="costs", lazy="select")
     updated_by_user = relationship("User", back_populates="costs")
 
 
@@ -28,6 +30,7 @@ class DailyConsumption(Base):
     __tablename__ = "daily_consumptions"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"), index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     date: Mapped[datetime.date] = mapped_column(Date, index=True)
     quantity_used: Mapped[float] = mapped_column(Float)
@@ -39,6 +42,7 @@ class DailyConsumption(Base):
     )
 
     product = relationship("Product", back_populates="consumptions")
+    site = relationship("Site", back_populates="consumptions", lazy="select")
     entered_by_user = relationship("User", back_populates="consumptions")
 
 
@@ -47,7 +51,8 @@ class DailyHeadcount(Base):
     __tablename__ = "daily_headcounts"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    date: Mapped[datetime.date] = mapped_column(Date, unique=True, index=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"), index=True)
+    date: Mapped[datetime.date] = mapped_column(Date, index=True)
     count: Mapped[int]
     entered_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -55,4 +60,5 @@ class DailyHeadcount(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+    site = relationship("Site", back_populates="headcounts", lazy="select")
     entered_by_user = relationship("User", back_populates="headcounts")

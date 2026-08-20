@@ -9,10 +9,15 @@ from app.models.consumption import RawMaterialCost
 from app.models.product import Product
 from app.schemas import CostCreate, CostUpdate, CostOut
 from app.core.security import get_current_user, require_roles
-from app.models.user import UserRole
+from app.models.user import UserRole, User
 
 router = APIRouter()
 _writer = require_roles(UserRole.admin, UserRole.manager, UserRole.nutrition_manager)
+
+
+def _get_site_id(user: User) -> int:
+    """Get site_id from user, defaulting to 1 if not set (for backward compatibility)."""
+    return user.site_id or 1
 
 
 def _enrich(c: RawMaterialCost) -> CostOut:
@@ -25,9 +30,12 @@ def _enrich(c: RawMaterialCost) -> CostOut:
 async def list_costs(
     product_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
-    _: object = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    q = select(RawMaterialCost).options(selectinload(RawMaterialCost.product))
+    site_id = _get_site_id(current_user)
+    q = select(RawMaterialCost).options(selectinload(RawMaterialCost.product)).where(
+        RawMaterialCost.site_id == site_id
+    )
     if product_id:
         q = q.where(RawMaterialCost.product_id == product_id)
     result = await db.execute(q.order_by(RawMaterialCost.effective_date.desc()))
@@ -38,11 +46,13 @@ async def list_costs(
 async def create_cost(
     data: CostCreate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(_writer),
+    current_user: User = Depends(_writer),
 ):
-    if not await db.get(Product, data.product_id):
+    site_id = data.site_id or _get_site_id(current_user)
+    product = await db.get(Product, data.product_id)
+    if not product or product.site_id != site_id:
         raise HTTPException(404, "Product not found")
-    cost = RawMaterialCost(**data.model_dump(), updated_by=current_user.id)
+    cost = RawMaterialCost(**data.model_dump(), site_id=site_id, updated_by=current_user.id)
     db.add(cost)
     await db.commit()
     result = await db.execute(
@@ -57,11 +67,12 @@ async def update_cost(
     cost_id: int,
     data: CostUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(_writer),
+    current_user: User = Depends(_writer),
 ):
+    site_id = _get_site_id(current_user)
     result = await db.execute(
         select(RawMaterialCost).options(selectinload(RawMaterialCost.product))
-        .where(RawMaterialCost.id == cost_id)
+        .where(RawMaterialCost.id == cost_id, RawMaterialCost.site_id == site_id)
     )
     cost = result.scalar_one_or_none()
     if not cost:
@@ -81,10 +92,11 @@ async def update_cost(
 async def delete_cost(
     cost_id: int,
     db: AsyncSession = Depends(get_db),
-    _: object = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_roles(UserRole.admin)),
 ):
+    site_id = _get_site_id(current_user)
     cost = await db.get(RawMaterialCost, cost_id)
-    if not cost:
+    if not cost or cost.site_id != site_id:
         raise HTTPException(404, "Cost entry not found")
     await db.delete(cost)
     await db.commit()

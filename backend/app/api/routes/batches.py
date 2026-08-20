@@ -9,7 +9,7 @@ from app.models.batch import Batch
 from app.models.product import Product
 from app.schemas import BatchCreate, BatchUpdate, BatchOut
 from app.core.security import get_current_user, require_roles
-from app.models.user import UserRole
+from app.models.user import UserRole, User
 from app.core.config import settings
 
 router = APIRouter()
@@ -17,6 +17,11 @@ _storekeeper_plus = require_roles(
     UserRole.admin, UserRole.manager,
     UserRole.storekeeper, UserRole.nutrition_manager
 )
+
+
+def _get_site_id(user: User) -> int:
+    """Get site_id from user, defaulting to 1 if not set (for backward compatibility)."""
+    return user.site_id or 1
 
 
 def _enrich(batch: Batch) -> BatchOut:
@@ -30,10 +35,14 @@ def _enrich(batch: Batch) -> BatchOut:
 async def list_batches(
     product_id: Optional[int] = None,
     expiring_within_days: Optional[int] = None,
+    include_archived: bool = False,
     db: AsyncSession = Depends(get_db),
-    _: object = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    q = select(Batch).options(selectinload(Batch.product))
+    site_id = _get_site_id(current_user)
+    q = select(Batch).options(selectinload(Batch.product)).where(Batch.site_id == site_id)
+    if not include_archived:
+        q = q.where(Batch.quantity > 0)
     if product_id:
         q = q.where(Batch.product_id == product_id)
     if expiring_within_days is not None:
@@ -46,11 +55,14 @@ async def list_batches(
 @router.get("/expiring/urgent", response_model=List[BatchOut])
 async def expiring_urgent(
     db: AsyncSession = Depends(get_db),
-    _: object = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Products expiring within EXPIRY_URGENT_THRESHOLD days."""
+    site_id = _get_site_id(current_user)
     threshold = datetime.date.today() + datetime.timedelta(days=settings.EXPIRY_URGENT_THRESHOLD)
     q = select(Batch).options(selectinload(Batch.product)).where(
+        Batch.site_id == site_id,
+        Batch.quantity > 0,
         Batch.expiry_date <= threshold
     )
     result = await db.execute(q.order_by(Batch.expiry_date))
@@ -60,11 +72,14 @@ async def expiring_urgent(
 @router.get("/expiring/planned", response_model=List[BatchOut])
 async def expiring_planned(
     db: AsyncSession = Depends(get_db),
-    _: object = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Products expiring within EXPIRY_PLANNED_THRESHOLD days."""
+    site_id = _get_site_id(current_user)
     threshold = datetime.date.today() + datetime.timedelta(days=settings.EXPIRY_PLANNED_THRESHOLD)
     q = select(Batch).options(selectinload(Batch.product)).where(
+        Batch.site_id == site_id,
+        Batch.quantity > 0,
         Batch.expiry_date <= threshold
     )
     result = await db.execute(q.order_by(Batch.expiry_date))
@@ -75,10 +90,14 @@ async def expiring_planned(
 async def get_batch(
     batch_id: int,
     db: AsyncSession = Depends(get_db),
-    _: object = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    site_id = _get_site_id(current_user)
     result = await db.execute(
-        select(Batch).options(selectinload(Batch.product)).where(Batch.id == batch_id)
+        select(Batch).options(selectinload(Batch.product)).where(
+            Batch.id == batch_id,
+            Batch.site_id == site_id
+        )
     )
     batch = result.scalar_one_or_none()
     if not batch:
@@ -90,12 +109,15 @@ async def get_batch(
 async def create_batch(
     data: BatchCreate,
     db: AsyncSession = Depends(get_db),
-    _: object = Depends(_storekeeper_plus),
+    current_user: User = Depends(_storekeeper_plus),
 ):
+    site_id = data.site_id or _get_site_id(current_user)
     product = await db.get(Product, data.product_id)
-    if not product:
+    if not product or product.site_id != site_id:
         raise HTTPException(404, "Product not found")
-    batch = Batch(**data.model_dump())
+    batch_data = data.model_dump()
+    batch_data["site_id"] = site_id
+    batch = Batch(**batch_data)
     db.add(batch)
     await db.commit()
     result = await db.execute(
@@ -109,10 +131,14 @@ async def update_batch(
     batch_id: int,
     data: BatchUpdate,
     db: AsyncSession = Depends(get_db),
-    _: object = Depends(_storekeeper_plus),
+    current_user: User = Depends(_storekeeper_plus),
 ):
+    site_id = _get_site_id(current_user)
     result = await db.execute(
-        select(Batch).options(selectinload(Batch.product)).where(Batch.id == batch_id)
+        select(Batch).options(selectinload(Batch.product)).where(
+            Batch.id == batch_id,
+            Batch.site_id == site_id
+        )
     )
     batch = result.scalar_one_or_none()
     if not batch:
@@ -131,10 +157,11 @@ async def update_batch(
 async def delete_batch(
     batch_id: int,
     db: AsyncSession = Depends(get_db),
-    _: object = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    current_user: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ):
+    site_id = _get_site_id(current_user)
     batch = await db.get(Batch, batch_id)
-    if not batch:
+    if not batch or batch.site_id != site_id:
         raise HTTPException(404, "Batch not found")
     await db.delete(batch)
     await db.commit()

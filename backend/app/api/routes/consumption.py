@@ -9,10 +9,15 @@ from app.models.consumption import DailyConsumption
 from app.models.product import Product
 from app.schemas import ConsumptionCreate, ConsumptionUpdate, ConsumptionOut
 from app.core.security import get_current_user, require_roles
-from app.models.user import UserRole
+from app.models.user import UserRole, User
 
 router = APIRouter()
 _writer = require_roles(UserRole.admin, UserRole.manager, UserRole.nutrition_manager)
+
+
+def _get_site_id(user: User) -> int:
+    """Get site_id from user, defaulting to 1 if not set (for backward compatibility)."""
+    return user.site_id or 1
 
 
 def _enrich(c: DailyConsumption) -> ConsumptionOut:
@@ -26,9 +31,12 @@ async def list_consumption(
     date: Optional[datetime.date] = None,
     product_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
-    _: object = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    q = select(DailyConsumption).options(selectinload(DailyConsumption.product))
+    site_id = _get_site_id(current_user)
+    q = select(DailyConsumption).options(selectinload(DailyConsumption.product)).where(
+        DailyConsumption.site_id == site_id
+    )
     if date:
         q = q.where(DailyConsumption.date == date)
     if product_id:
@@ -41,11 +49,17 @@ async def list_consumption(
 async def create_consumption(
     data: ConsumptionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(_writer),
+    current_user: User = Depends(_writer),
 ):
-    if not await db.get(Product, data.product_id):
+    site_id = data.site_id or _get_site_id(current_user)
+    product = await db.get(Product, data.product_id)
+    if not product or product.site_id != site_id:
         raise HTTPException(404, "Product not found")
-    entry = DailyConsumption(**data.model_dump(), entered_by=current_user.id)
+    entry = DailyConsumption(
+        **data.model_dump(),
+        site_id=site_id,
+        entered_by=current_user.id
+    )
     db.add(entry)
     await db.commit()
     result = await db.execute(
@@ -60,11 +74,12 @@ async def update_consumption(
     entry_id: int,
     data: ConsumptionUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(_writer),
+    current_user: User = Depends(_writer),
 ):
+    site_id = _get_site_id(current_user)
     result = await db.execute(
         select(DailyConsumption).options(selectinload(DailyConsumption.product))
-        .where(DailyConsumption.id == entry_id)
+        .where(DailyConsumption.id == entry_id, DailyConsumption.site_id == site_id)
     )
     entry = result.scalar_one_or_none()
     if not entry:
@@ -83,10 +98,11 @@ async def update_consumption(
 async def delete_consumption(
     entry_id: int,
     db: AsyncSession = Depends(get_db),
-    _: object = Depends(require_roles(UserRole.admin, UserRole.manager)),
+    current_user: User = Depends(require_roles(UserRole.admin, UserRole.manager)),
 ):
+    site_id = _get_site_id(current_user)
     entry = await db.get(DailyConsumption, entry_id)
-    if not entry:
+    if not entry or entry.site_id != site_id:
         raise HTTPException(404, "Entry not found")
     await db.delete(entry)
     await db.commit()

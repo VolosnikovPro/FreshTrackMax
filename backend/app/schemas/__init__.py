@@ -21,10 +21,37 @@ class TokenResponse(BaseModel):
     user: "UserOut"
 
 
+# ─── Site ─────────────────────────────────────────────────────────────────────
+
+class SiteCreate(BaseModel):
+    name: str
+    code: str
+    description: Optional[str] = None
+
+
+class SiteUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class SiteOut(BaseModel):
+    id: int
+    name: str
+    code: str
+    description: Optional[str]
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ─── User ─────────────────────────────────────────────────────────────────────
 
 class UserOut(BaseModel):
     id: int
+    site_id: int
     username: str
     display_name: str
     role: UserRole
@@ -40,6 +67,7 @@ class UserCreate(BaseModel):
     role: UserRole = UserRole.storekeeper
     password: Optional[str] = None
     max_user_id: Optional[int] = None
+    site_id: Optional[int] = None
 
 
 class UserUpdate(BaseModel):
@@ -54,6 +82,7 @@ class UserUpdate(BaseModel):
 # ─── Product ──────────────────────────────────────────────────────────────────
 
 class ProductCreate(BaseModel):
+    site_id: Optional[int] = None
     name: str
     sku: Optional[str] = None
     unit: str = "kg"
@@ -72,6 +101,7 @@ class ProductUpdate(BaseModel):
 
 class ProductOut(BaseModel):
     id: int
+    site_id: int
     name: str
     sku: Optional[str]
     unit: str
@@ -85,6 +115,7 @@ class ProductOut(BaseModel):
 # ─── Batch ────────────────────────────────────────────────────────────────────
 
 class BatchCreate(BaseModel):
+    site_id: Optional[int] = None
     product_id: int
     batch_number: Optional[str] = None
     quantity: float = Field(..., gt=0)
@@ -104,6 +135,7 @@ class BatchUpdate(BaseModel):
 
 class BatchOut(BaseModel):
     id: int
+    site_id: int
     product_id: int
     product_name: str = ""
     batch_number: Optional[str]
@@ -122,6 +154,7 @@ class BatchOut(BaseModel):
 # ─── Cost ─────────────────────────────────────────────────────────────────────
 
 class CostCreate(BaseModel):
+    site_id: Optional[int] = None
     product_id: int
     cost_per_unit: float = Field(..., gt=0)
     currency: str = "RUB"
@@ -137,6 +170,7 @@ class CostUpdate(BaseModel):
 
 class CostOut(BaseModel):
     id: int
+    site_id: int
     product_id: int
     product_name: str = ""
     cost_per_unit: float
@@ -151,6 +185,7 @@ class CostOut(BaseModel):
 # ─── Consumption ──────────────────────────────────────────────────────────────
 
 class ConsumptionCreate(BaseModel):
+    site_id: Optional[int] = None
     product_id: int
     date: date
     quantity_used: float = Field(..., gt=0)
@@ -165,6 +200,7 @@ class ConsumptionUpdate(BaseModel):
 
 class ConsumptionOut(BaseModel):
     id: int
+    site_id: int
     product_id: int
     product_name: str = ""
     date: date
@@ -179,6 +215,7 @@ class ConsumptionOut(BaseModel):
 # ─── Headcount ────────────────────────────────────────────────────────────────
 
 class HeadcountCreate(BaseModel):
+    site_id: Optional[int] = None
     date: date
     count: int = Field(..., gt=0)
     notes: Optional[str] = None
@@ -191,6 +228,7 @@ class HeadcountUpdate(BaseModel):
 
 class HeadcountOut(BaseModel):
     id: int
+    site_id: int
     date: date
     count: int
     notes: Optional[str]

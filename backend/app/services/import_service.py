@@ -27,6 +27,7 @@ from sqlalchemy import select
 
 from app.models.product import Product
 from app.models.batch import Batch
+from app.models.site import Site
 from app.models.consumption import RawMaterialCost, DailyConsumption
 
 log = logging.getLogger(__name__)
@@ -98,21 +99,25 @@ def _clean_float(value) -> Optional[float]:
 
 async def _get_or_create_product(
     db: AsyncSession,
+    site_id: int,
     name: str,
     unit: str,
     sku: Optional[str] = None,
 ) -> Product:
-    """Find existing product by name (case-insensitive) or create new."""
+    """Find existing product by name (case-insensitive) within site or create new."""
     name = name.strip()
     unit = unit.strip() or "шт"
 
     result = await db.execute(
-        select(Product).where(Product.name.ilike(name))
+        select(Product).where(
+            Product.site_id == site_id,
+            Product.name.ilike(name)
+        )
     )
     product = result.scalar_one_or_none()
 
     if product is None:
-        product = Product(name=name, unit=unit, sku=sku, is_active=True)
+        product = Product(site_id=site_id, name=name, unit=unit, sku=sku, is_active=True)
         db.add(product)
         await db.flush()  # assign ID within transaction
 

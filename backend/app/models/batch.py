@@ -9,6 +9,7 @@ class Batch(Base):
     __tablename__ = "batches"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"), index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     batch_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     quantity: Mapped[float] = mapped_column(Float, default=0.0)
@@ -24,6 +25,7 @@ class Batch(Base):
     )
 
     product = relationship("Product", back_populates="batches")
+    site = relationship("Site", back_populates="batches", lazy="select")
 
     @property
     def days_until_expiry(self) -> int:
