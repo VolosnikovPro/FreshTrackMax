@@ -2,6 +2,7 @@ export type UserRole = 'admin' | 'manager' | 'storekeeper' | 'nutrition_manager'
 
 export interface User {
   id: number;
+  site_id: number;
   username: string;
   display_name: string;
   role: UserRole;
@@ -14,8 +15,18 @@ export interface AuthState {
   token: string | null;
 }
 
+export interface Site {
+  id: number;
+  name: string;
+  code: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface Product {
   id: number;
+  site_id: number;
   name: string;
   sku: string | null;
   unit: string;
@@ -26,6 +37,7 @@ export interface Product {
 
 export interface Batch {
   id: number;
+  site_id: number;
   product_id: number;
   product_name: string;
   batch_number: string | null;
@@ -41,6 +53,7 @@ export interface Batch {
 
 export interface RawMaterialCost {
   id: number;
+  site_id: number;
   product_id: number;
   product_name: string;
   cost_per_unit: number;
@@ -52,6 +65,7 @@ export interface RawMaterialCost {
 
 export interface DailyConsumption {
   id: number;
+  site_id: number;
   product_id: number;
   product_name: string;
   date: string;
@@ -63,6 +77,7 @@ export interface DailyConsumption {
 
 export interface DailyHeadcount {
   id: number;
+  site_id: number;
   date: string;
   count: number;
   notes: string | null;

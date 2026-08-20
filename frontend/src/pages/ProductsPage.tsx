@@ -9,8 +9,12 @@ const UNITS = ['кг','л','шт','г','мл','уп','кор','пач'].map(u =>
 type Filter = 'active' | 'all';
 
 export default function ProductsPage() {
-  const { hasRole } = useAuth();
-  const canWrite = hasRole('admin', 'manager', 'nutrition_manager');
+  const { hasRole, user } = useAuth();
+  const role = user?.role;
+  const canWrite = hasRole('admin', 'storekeeper');
+  const canView = hasRole('admin', 'manager', 'storekeeper', 'nutrition_manager');
+  const canEdit = hasRole('admin'); // Only admin can edit existing products
+  const canDelete = hasRole('admin'); // Only admin can delete
 
   const [products, setProducts] = useState<Product[]>([]);
   const [filter, setFilter] = useState<Filter>('active');
@@ -42,6 +46,7 @@ export default function ProductsPage() {
     setShowForm(true);
   };
   const openEdit = (p: Product) => {
+    if (!canEdit) return;
     setEditing(p);
     setForm({ name: p.name, sku: p.sku || '', unit: p.unit, category: p.category || '', description: p.description || '' });
     setShowForm(true);
@@ -58,9 +63,20 @@ export default function ProductsPage() {
   };
 
   const toggleActive = async (p: Product) => {
+    if (!canEdit) return;
     await productsApi.update(p.id, { is_active: !p.is_active });
     load();
   };
+
+  if (!canView) {
+    return (
+      <div style={{ padding: 24, textAlign: 'center', color: T.sub }}>
+        <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
+        <div style={{ fontWeight: 600 }}>Нет доступа к этому разделу</div>
+        <div style={{ fontSize: 13, marginTop: 4 }}>Ваша роль: {role}</div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -105,9 +121,10 @@ export default function ProductsPage() {
                     <span>Ед: {p.unit}</span>
                     {p.sku && <span>SKU: {p.sku}</span>}
                     {p.category && <span>📂 {p.category}</span>}
+                    {role === 'nutrition_manager' && <Badge color="blue">Просмотр</Badge>}
                   </div>
                 </div>
-                {canWrite && (
+                {canEdit && (
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                     <button onClick={() => openEdit(p)} style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 7, padding: '7px 10px', cursor: 'pointer' }}>
                       <Pencil size={14} color={T.sub} />

@@ -1,19 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { adminApi, sheetsApi } from '../api';
-import { User, UserRole } from '../types';
+import { adminApi, sheetsApi, sitesApi } from '../api';
+import { User, UserRole, Site } from '../types';
 import { Card, Modal, Input, Select, Loading, ErrorMsg, Badge, T } from '../components/common/UI';
-import { Pencil, Upload, Users, FileSpreadsheet, Trash } from 'lucide-react';
+import { Pencil, Upload, Users, FileSpreadsheet, Trash, Building2, Plus } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Администратор' },
-  { value: 'manager', label: 'Управляющий' },
+  { value: 'manager', label: 'Управляющий (УПП)' },
   { value: 'storekeeper', label: 'Кладовщик' },
-  { value: 'nutrition_manager', label: 'Управл. по питанию' },
+  { value: 'nutrition_manager', label: 'Управл. по питанию (УОП)' },
 ];
 const ROLE_LABELS: Record<UserRole, string> = {
-  admin: 'Администратор', manager: 'Управляющий',
-  storekeeper: 'Кладовщик', nutrition_manager: 'Управл. по питанию',
+  admin: 'Администратор', manager: 'Управляющий (УПП)',
+  storekeeper: 'Кладовщик', nutrition_manager: 'Управл. по питанию (УОП)',
 };
 const ROLE_COLORS: Record<UserRole, 'blue' | 'green' | 'yellow' | 'gray'> = {
   admin: 'blue', manager: 'green', storekeeper: 'yellow', nutrition_manager: 'gray',
@@ -23,7 +23,7 @@ const IMPORT_TYPES = [
   { value: 'cost_sheet', label: 'Себестоимость расхода сырья' },
 ];
 
-type Tab = 'users' | 'import';
+type Tab = 'users' | 'sites' | 'import';
 
 export default function AdminPage() {
   const { hasRole } = useAuth();
@@ -31,13 +31,19 @@ export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('users');
 
   const [users, setUsers] = useState<User[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   // User form
   const [showUserForm, setShowUserForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [userForm, setUserForm] = useState({ username: '', display_name: '', role: 'storekeeper' as UserRole, password: '', max_user_id: undefined as undefined | number });
+  const [userForm, setUserForm] = useState({ username: '', display_name: '', role: 'storekeeper' as UserRole, password: '', max_user_id: undefined as undefined | number, site_id: undefined as undefined | number });
+
+  // Site form
+  const [showSiteForm, setShowSiteForm] = useState(false);
+  const [editingSite, setEditingSite] = useState<Site | null>(null);
+  const [siteForm, setSiteForm] = useState({ name: '', code: '', description: '', is_active: true });
 
   // Import state
   const [importType, setImportType] = useState('risk_report');
@@ -48,22 +54,23 @@ export default function AdminPage() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
 
-  const loadUsers = () => {
-    adminApi.listUsers()
-      .then(r => setUsers(r.data))
-      .catch(() => setError('Ошибка загрузки'))
-      .finally(() => setLoading(false));
+  const loadData = () => {
+    setLoading(true);
+    Promise.all([
+      adminApi.listUsers().then(r => setUsers(r.data)).catch(() => {}),
+      sitesApi.list().then(r => setSites(r.data)).catch(() => {}),
+    ]).catch(() => setError('Ошибка загрузки')).finally(() => setLoading(false));
   };
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => { loadData(); }, []);
 
   const openCreateUser = () => {
     setEditingUser(null);
-    setUserForm({ username: '', display_name: '', role: 'storekeeper', password: '', max_user_id: undefined });
+    setUserForm({ username: '', display_name: '', role: 'storekeeper', password: '', max_user_id: undefined, site_id: sites[0]?.id });
     setShowUserForm(true);
   };
   const openEditUser = (u: User) => {
     setEditingUser(u);
-    setUserForm({ username: u.username, display_name: u.display_name, role: u.role, password: '', max_user_id: u.max_user_id });
+    setUserForm({ username: u.username, display_name: u.display_name, role: u.role, password: '', max_user_id: u.max_user_id, site_id: u.site_id });
     setShowUserForm(true);
   };
 
@@ -76,12 +83,44 @@ export default function AdminPage() {
         await adminApi.createUser(userForm);
       }
       setShowUserForm(false);
-      loadUsers();
+      loadData();
     } catch (e: any) { setError(e.response?.data?.detail || 'Ошибка'); }
   };
 
   const toggleActive = async (u: User) => {
-    await adminApi.updateUser(u.id, { is_active: !u.is_active }); loadUsers();
+    await adminApi.updateUser(u.id, { is_active: !u.is_active }); loadData();
+  };
+
+  const openCreateSite = () => {
+    setEditingSite(null);
+    setSiteForm({ name: '', code: '', description: '', is_active: true });
+    setShowSiteForm(true);
+  };
+  const openEditSite = (s: Site) => {
+    setEditingSite(s);
+    setSiteForm({ name: s.name, code: s.code, description: s.description || '', is_active: s.is_active });
+    setShowSiteForm(true);
+  };
+
+  const handleSaveSite = async () => {
+    if (!siteForm.name || !siteForm.code) { setError('Название и код обязательны'); return; }
+    try {
+      if (editingSite) {
+        await sitesApi.update(editingSite.id, siteForm);
+      } else {
+        await sitesApi.create(siteForm);
+      }
+      setShowSiteForm(false);
+      loadData();
+    } catch (e: any) { setError(e.response?.data?.detail || 'Ошибка'); }
+  };
+
+  const handleDeleteSite = async (id: number) => {
+    if (!window.confirm('Деактивировать объект? Он станет недоступен пользователям.')) return;
+    try {
+      await sitesApi.delete(id);
+      loadData();
+    } catch { setError('Ошибка удаления'); }
   };
 
   const handleImport = async () => {
@@ -110,7 +149,11 @@ export default function AdminPage() {
 
       {/* Tab switcher */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {([['users', <Users size={15} />, 'Пользователи'], ['import', <FileSpreadsheet size={15} />, 'Импорт данных']] as const).map(([t, icon, label]) => (
+        {([
+          ['users', <Users size={15} />, 'Пользователи'],
+          ['sites', <Building2 size={15} />, 'Объекты'],
+          ['import', <FileSpreadsheet size={15} />, 'Импорт данных'],
+        ] as const).map(([t, icon, label]) => (
           <button key={t} onClick={() => setTab(t as Tab)} style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             padding: '11px', borderRadius: 10, cursor: 'pointer',
@@ -134,7 +177,9 @@ export default function AdminPage() {
               background: T.blue, color: '#fff', border: 'none', fontSize: 14,
               fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            }}>+ Новый пользователь</button>
+            }}>
+              <Plus size={14} /> Новый пользователь
+            </button>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {users.map(u => (
@@ -145,12 +190,15 @@ export default function AdminPage() {
                     <div style={{ fontSize: 12, color: T.sub, marginTop: 2 }}>@{u.username}</div>
                     <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <Badge color={ROLE_COLORS[u.role]}>{ROLE_LABELS[u.role]}</Badge>
+                      {sites.find(s => s.id === u.site_id) && (
+                        <Badge color="blue">{sites.find(s => s.id === u.site_id)?.name}</Badge>
+                      )}
                       {!u.is_active && <Badge color="gray">Отключён</Badge>}
                     </div>
                   </div>
                   {isAdmin && (
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button onClick={() => adminApi.deleteUser(u.id).then(() => setUsers(users.filter(x => x.id != u.id)))} style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 7, padding: '7px 10px', cursor: 'pointer' }}>
+                      <button onClick={() => adminApi.deleteUser(u.id).then(() => setUsers(users.filter(x => x.id !== u.id)))} style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 7, padding: '7px 10px', cursor: 'pointer' }}>
                         <Trash size={14} color={T.sub} />
                       </button>
                       <button onClick={() => openEditUser(u)} style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 7, padding: '7px 10px', cursor: 'pointer' }}>
@@ -163,6 +211,48 @@ export default function AdminPage() {
                         fontSize: 12, fontWeight: 600, color: u.is_active ? T.red : T.green, fontFamily: 'inherit',
                       }}>
                         {u.is_active ? 'Откл' : 'Вкл'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ── Sites tab ── */}
+      {tab === 'sites' && (
+        <>
+          {isAdmin && (
+            <button onClick={openCreateSite} style={{
+              width: '100%', marginBottom: 12, padding: '12px', borderRadius: 10,
+              background: T.blue, color: '#fff', border: 'none', fontSize: 14,
+              fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}>
+              <Plus size={14} /> Новый объект
+            </button>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {sites.map(s => (
+              <Card key={s.id} style={{ padding: '14px 16px', opacity: s.is_active ? 1 : 0.6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{s.name}</div>
+                    <div style={{ fontSize: 12, color: T.sub, marginTop: 2 }}>Код: {s.code}</div>
+                    {s.description && <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{s.description}</div>}
+                    <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
+                      {s.is_active ? <Badge color="green">Активен</Badge> : <Badge color="gray">Неактивен</Badge>}
+                    </div>
+                  </div>
+                  {isAdmin && (
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button onClick={() => handleDeleteSite(s.id)} style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 7, padding: '7px 10px', cursor: 'pointer' }}>
+                        <Trash size={14} color={T.sub} />
+                      </button>
+                      <button onClick={() => openEditSite(s)} style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: 7, padding: '7px 10px', cursor: 'pointer' }}>
+                        <Pencil size={14} color={T.sub} />
                       </button>
                     </div>
                   )}
@@ -288,11 +378,29 @@ export default function AdminPage() {
             <Input label="Логин *" value={userForm.username} onChange={e => setUserForm({ ...userForm, username: e.target.value })} placeholder="username" autoCapitalize="none" />
             <Input label="Отображаемое имя" value={userForm.display_name} onChange={e => setUserForm({ ...userForm, display_name: e.target.value })} placeholder="Иванов Иван" />
             <Select label="Роль" value={userForm.role} onChange={e => setUserForm({ ...userForm, role: e.target.value as UserRole })} options={ROLE_OPTIONS} />
+            <Select label="Объект" value={String(userForm.site_id || '')} onChange={e => setUserForm({ ...userForm, site_id: e.target.value ? +e.target.value : undefined })} options={[{ value: '', label: '— Выберите объект —' }, ...sites.map(s => ({ value: String(s.id), label: `${s.name} (${s.code})` }))]} />
             <Input label="Пароль (для локального входа)" type="password" value={userForm.password} onChange={e => setUserForm({ ...userForm, password: e.target.value })} placeholder="Пусто = только MAX-авторизация" />
             <Input label="MAX User ID" value={userForm.max_user_id} onChange={e => setUserForm({ ...userForm, max_user_id: e.target.value ? +e.target.value : undefined })} placeholder="ID пользователя в MAX" />
             <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
               <button onClick={handleSaveUser} style={{ flex: 1, background: T.blue, color: '#fff', border: 'none', borderRadius: 10, padding: 14, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Сохранить</button>
               <button onClick={() => setShowUserForm(false)} style={{ flex: 1, background: T.bg, color: T.sub, border: `1px solid ${T.border}`, borderRadius: 10, padding: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Отмена</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Site form modal */}
+      {showSiteForm && (
+        <Modal title={editingSite ? `Редактировать: ${editingSite.name}` : 'Новый объект'} onClose={() => setShowSiteForm(false)}>
+          {error && <ErrorMsg message={error} />}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <Input label="Название *" value={siteForm.name} onChange={e => setSiteForm({ ...siteForm, name: e.target.value })} placeholder="Асача" />
+            <Input label="Код *" value={siteForm.code} onChange={e => setSiteForm({ ...siteForm, code: e.target.value })} placeholder="ASACH" />
+            <Input label="Описание" value={siteForm.description} onChange={e => setSiteForm({ ...siteForm, description: e.target.value })} placeholder="Описание объекта" />
+            <Select label="Статус" value={String(siteForm.is_active)} onChange={e => setSiteForm({ ...siteForm, is_active: e.target.value === 'true' })} options={[{ value: 'true', label: 'Активен' }, { value: 'false', label: 'Неактивен' }]} />
+            <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
+              <button onClick={handleSaveSite} style={{ flex: 1, background: T.blue, color: '#fff', border: 'none', borderRadius: 10, padding: 14, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Сохранить</button>
+              <button onClick={() => setShowSiteForm(false)} style={{ flex: 1, background: T.bg, color: T.sub, border: `1px solid ${T.border}`, borderRadius: 10, padding: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Отмена</button>
             </div>
           </div>
         </Modal>

@@ -6,8 +6,14 @@ import { useAuth } from '../hooks/useAuth';
 import { format, parseISO } from 'date-fns';
 
 export default function HeadcountPage() {
-  const { hasRole } = useAuth();
-  const canWrite = hasRole('admin', 'manager');
+  const { hasRole, user } = useAuth();
+  const role = user?.role;
+  const isAdmin = role === 'admin';
+  const isManager = role === 'manager';
+  const isNutritionManager = role === 'nutrition_manager';
+  const canWrite = isAdmin || isManager;
+  const canView = isAdmin || isManager || isNutritionManager;
+
   const [entries, setEntries] = useState<DailyHeadcount[]>([]);
   const [todayEntry, setTodayEntry] = useState<DailyHeadcount | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,8 +45,85 @@ export default function HeadcountPage() {
     } catch (e: any) { setError(e.response?.data?.detail || 'Ошибка'); }
   };
 
+  if (!canView) {
+    return (
+      <div style={{ padding: 24, textAlign: 'center', color: T.sub }}>
+        <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
+        <div style={{ fontWeight: 600 }}>Нет доступа к этому разделу</div>
+        <div style={{ fontSize: 13, marginTop: 4 }}>Ваша роль: {role}</div>
+      </div>
+    );
+  }
+
   if (loading) return <Loading />;
 
+  // For nutrition_manager (UOP): aggregated view only, no editing
+  if (isNutritionManager) {
+    const totalCount = entries.reduce((sum, e) => sum + e.count, 0);
+    const avgCount = entries.length > 0 ? Math.round(totalCount / entries.length) : 0;
+    const maxCount = entries.length > 0 ? Math.max(...entries.map(e => e.count)) : 0;
+    const minCount = entries.length > 0 ? Math.min(...entries.map(e => e.count)) : 0;
+
+    return (
+      <div>
+        <h1 style={{ margin: '0 0 16px', fontSize: 20, fontWeight: 800, color: T.text }}>Питающиеся</h1>
+        <div style={{ fontSize: 12, color: T.sub, marginBottom: 16 }}>Режим просмотра: агрегированные данные</div>
+        {error && <ErrorMsg message={error} />}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 12, marginBottom: 20 }}>
+          <Card style={{ padding: '16px', textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: T.blue }}>{todayEntry?.count ?? '—'}</div>
+            <div style={{ fontSize: 11, color: T.sub, marginTop: 4 }}>Сегодня</div>
+          </Card>
+          <Card style={{ padding: '16px', textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: T.text }}>{avgCount}</div>
+            <div style={{ fontSize: 11, color: T.sub, marginTop: 4 }}>Среднее</div>
+          </Card>
+          <Card style={{ padding: '16px', textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: T.red }}>{maxCount}</div>
+            <div style={{ fontSize: 11, color: T.sub, marginTop: 4 }}>Максимум</div>
+          </Card>
+          <Card style={{ padding: '16px', textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: T.green }}>{minCount}</div>
+            <div style={{ fontSize: 11, color: T.sub, marginTop: 4 }}>Минимум</div>
+          </Card>
+        </div>
+
+        {/* History table */}
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: T.bg, borderBottom: `1px solid ${T.border}` }}>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: T.text }}>Дата</th>
+                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: T.text }}>Кол-во</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: T.text }}>Примечание</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map(e => (
+                <tr key={e.id} style={{ borderBottom: `1px solid ${T.border}` }}>
+                  <td style={{ padding: '10px 12px', color: T.text, fontWeight: e.date === today ? 700 : 400 }}>
+                    {format(parseISO(e.date), 'dd.MM.yyyy')}{e.date === today && ' (сегодня)'}
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: T.text }}>{e.count} чел.</td>
+                  <td style={{ padding: '10px 12px', color: T.sub }}>{e.notes || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+
+        {entries.length === 0 && (
+          <Card style={{ padding: 24, textAlign: 'center' }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>👥</div>
+            <div style={{ fontWeight: 600, color: T.sub }}>Нет записей</div>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  // Admin/Manager view - full edit capability
   return (
     <div>
       <h1 style={{ margin: '0 0 16px', fontSize: 20, fontWeight: 800, color: T.text }}>Питающиеся</h1>
