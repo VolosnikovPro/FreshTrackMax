@@ -10,6 +10,11 @@ from app.models.product import Product
 from app.schemas import ConsumptionCreate, ConsumptionUpdate, ConsumptionOut
 from app.core.security import get_current_user, require_roles
 from app.models.user import UserRole, User
+from app.services.consumption_service import (
+    process_daily_consumption_import,
+    check_stock_availability,
+    WriteOffResult,
+)
 
 router = APIRouter()
 _writer = require_roles(UserRole.admin, UserRole.manager, UserRole.nutrition_manager)
@@ -45,6 +50,24 @@ async def list_consumption(
     return [_enrich(c) for c in result.scalars().all()]
 
 
+@router.get("/stock-check/{product_id}", response_model=dict)
+async def check_stock(
+    product_id: int,
+    quantity: float,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Check if sufficient stock is available for a product (FEFO)."""
+    site_id = _get_site_id(current_user)
+    result = await check_stock_availability(db, site_id, product_id, quantity)
+    return {
+        "available": result.available,
+        "required": result.required,
+        "sufficient": result.sufficient,
+        "batches": result.batches,
+    }
+
+
 @router.post("/", response_model=ConsumptionOut, status_code=201)
 async def create_consumption(
     data: ConsumptionCreate,
@@ -55,18 +78,35 @@ async def create_consumption(
     product = await db.get(Product, data.product_id)
     if not product or product.site_id != site_id:
         raise HTTPException(404, "Product not found")
-    entry = DailyConsumption(
-        **data.model_dump(),
+
+    # Use FEFO write-off service
+    result = await process_daily_consumption_import(
+        db=db,
         site_id=site_id,
-        entered_by=current_user.id
+        product_id=data.product_id,
+        date=data.date,
+        quantity_used=data.quantity_used,
+        unit=data.unit,
+        entered_by=current_user.id,
+        notes=data.notes,
     )
-    db.add(entry)
+
+    if not result.success:
+        await db.rollback()
+        error_msg = "; ".join(result.errors)
+        raise HTTPException(400, f"Ошибка списания: {error_msg}")
+
     await db.commit()
-    result = await db.execute(
+
+    # Return the created consumption entry
+    result_q = await db.execute(
         select(DailyConsumption).options(selectinload(DailyConsumption.product))
-        .where(DailyConsumption.id == entry.id)
+        .where(DailyConsumption.site_id == site_id)
+        .order_by(DailyConsumption.created_at.desc())
+        .limit(1)
     )
-    return _enrich(result.scalar_one())
+    entry = result_q.scalar_one()
+    return _enrich(entry)
 
 
 @router.put("/{entry_id}", response_model=ConsumptionOut)

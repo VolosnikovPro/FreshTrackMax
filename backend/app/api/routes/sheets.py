@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.core.security import get_current_user, require_roles
-from app.models.user import UserRole
+from app.models.user import UserRole, User
 from app.services.import_service import (
     import_from_bytes,
     import_from_google_sheets,
@@ -20,6 +20,12 @@ from app.services.import_service import (
 
 router = APIRouter()
 _writer = require_roles(UserRole.admin, UserRole.manager)
+
+
+def _get_site_id(user: User) -> int:
+    """Get site_id from user, defaulting to 1 if not set (for backward compatibility)."""
+    return user.site_id or 1
+
 
 IMPORT_TYPES = {
     "risk_report": "Риск-Отчет (продукты + партии + сроки годности)",
@@ -58,7 +64,7 @@ async def import_from_file(
     import_type: str = "risk_report",
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(_writer),
+    current_user: User = Depends(_writer),
 ):
     """
     Upload an xlsx file and import its data.
@@ -80,8 +86,9 @@ async def import_from_file(
     if len(content) > 20 * 1024 * 1024:  # 20 MB guard
         raise HTTPException(413, "Файл слишком большой (макс. 20 МБ)")
 
+    site_id = _get_site_id(current_user)
     result = await import_from_bytes(
-        db, content, import_type, updated_by=current_user.id
+        db, content, import_type, site_id, updated_by=current_user.id
     )
     await db.commit()
     return _result_out(result, import_type, source=file.filename)
@@ -91,7 +98,7 @@ async def import_from_file(
 async def import_from_sheets(
     body: SheetsImportRequest,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(_writer),
+    current_user: User = Depends(_writer),
 ):
     """
     Import from a Google Sheets URL or spreadsheet ID.
@@ -110,10 +117,12 @@ async def import_from_sheets(
             f"Недопустимый import_type. Допустимые: {list(IMPORT_TYPES.keys())}"
         )
 
+    site_id = _get_site_id(current_user)
     result = await import_from_google_sheets(
         db,
         url_or_id=body.url_or_id,
         import_type=body.import_type,
+        site_id=site_id,
         sheet_name=body.sheet_name,
         updated_by=current_user.id,
     )

@@ -129,6 +129,7 @@ async def _get_or_create_product(
 async def import_risk_report(
     db: AsyncSession,
     wb: openpyxl.Workbook,
+    site_id: int,
     updated_by: Optional[int] = None,
 ) -> ImportResult:
     """
@@ -191,12 +192,13 @@ async def import_risk_report(
         expiry_date = _excel_serial_to_date(expiry_raw)
 
         try:
-            product = await _get_or_create_product(db, name, unit)
+            product = await _get_or_create_product(db, site_id, name, unit)
 
             if expiry_date is not None and qty is not None and qty > 0:
                 # Upsert: one batch per product+expiry_date
                 res = await db.execute(
                     select(Batch).where(
+                        Batch.site_id == site_id,
                         Batch.product_id == product.id,
                         Batch.expiry_date == expiry_date,
                     )
@@ -210,6 +212,7 @@ async def import_risk_report(
                     result.updated += 1
                 else:
                     db.add(Batch(
+                        site_id=site_id,
                         product_id=product.id,
                         quantity=qty,
                         unit=unit,
@@ -233,6 +236,7 @@ async def import_risk_report(
 async def import_cost_sheet(
     db: AsyncSession,
     wb: openpyxl.Workbook,
+    site_id: int,
     updated_by: Optional[int] = None,
     effective_date: Optional[datetime.date] = None,
 ) -> ImportResult:
@@ -304,12 +308,13 @@ async def import_cost_sheet(
         balance = _clean_float(get(row, c_balance))
 
         try:
-            product = await _get_or_create_product(db, name, unit)
+            product = await _get_or_create_product(db, site_id, name, unit)
 
             # Upsert cost
             if price is not None and price > 0:
                 res = await db.execute(
                     select(RawMaterialCost).where(
+                        RawMaterialCost.site_id == site_id,
                         RawMaterialCost.product_id == product.id,
                         RawMaterialCost.effective_date == today,
                     )
@@ -321,6 +326,7 @@ async def import_cost_sheet(
                     result.updated += 1
                 else:
                     db.add(RawMaterialCost(
+                        site_id=site_id,
                         product_id=product.id,
                         cost_per_unit=price,
                         currency="RUB",
@@ -333,6 +339,7 @@ async def import_cost_sheet(
             if balance is not None and balance > 0:
                 res = await db.execute(
                     select(Batch).where(
+                        Batch.site_id == site_id,
                         Batch.product_id == product.id,
                         Batch.expiry_date == placeholder_expiry,
                     )
@@ -343,6 +350,7 @@ async def import_cost_sheet(
                     batch.unit     = unit
                 else:
                     db.add(Batch(
+                        site_id=site_id,
                         product_id=product.id,
                         quantity=balance,
                         unit=unit,
@@ -441,6 +449,7 @@ async def import_from_bytes(
     db: AsyncSession,
     xlsx_bytes: bytes,
     import_type: str,
+    site_id: int,
     updated_by: Optional[int] = None,
 ) -> ImportResult:
     """Parse xlsx bytes and import. import_type: 'risk_report' | 'cost_sheet'"""
@@ -456,9 +465,9 @@ async def import_from_bytes(
         return r
 
     if import_type == "risk_report":
-        return await import_risk_report(db, wb, updated_by=updated_by)
+        return await import_risk_report(db, wb, site_id, updated_by=updated_by)
     elif import_type == "cost_sheet":
-        return await import_cost_sheet(db, wb, updated_by=updated_by)
+        return await import_cost_sheet(db, wb, site_id, updated_by=updated_by)
     else:
         r = ImportResult()
         r.add_error(
@@ -472,6 +481,7 @@ async def import_from_google_sheets(
     db: AsyncSession,
     url_or_id: str,
     import_type: str,
+    site_id: int,
     sheet_name: str = "",
     updated_by: Optional[int] = None,
 ) -> ImportResult:
@@ -483,4 +493,4 @@ async def import_from_google_sheets(
         r.add_error(str(e))
         return r
 
-    return await import_from_bytes(db, xlsx_bytes, import_type, updated_by=updated_by)
+    return await import_from_bytes(db, xlsx_bytes, import_type, site_id, updated_by=updated_by)
