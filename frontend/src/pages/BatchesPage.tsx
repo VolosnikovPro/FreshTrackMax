@@ -31,7 +31,7 @@ export default function BatchesPage() {
   const load = () => {
     setLoading(true);
     Promise.all([
-      batchesApi.list(filter).then(r => setBatches(r.data)),
+      batchesApi.list({ filter }).then(r => setBatches(r.data)),
       productsApi.list(true).then(r => setProducts(r.data)),
     ]).catch(() => setError('Ошибка загрузки')).finally(() => setLoading(false));
   };
@@ -180,9 +180,8 @@ export default function BatchesPage() {
             <Select
               label="Продукт *"
               value={form.product_id}
-              onChange={e => setForm({ ...form, product_id: e.target.value })}
+              onChange={(e: any) => setForm({ ...form, product_id: e.target.value })}
               options={products.map(p => ({ value: p.id.toString(), label: p.name }))}
-              placeholder="Выберите продукт"
             />
             <Input label="Номер УПД" value={form.batch_number} onChange={e => setForm({ ...form, batch_number: e.target.value })} placeholder="УПД-001" />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

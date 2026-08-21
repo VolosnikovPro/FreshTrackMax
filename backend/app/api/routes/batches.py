@@ -36,6 +36,7 @@ async def list_batches(
     product_id: Optional[int] = None,
     expiring_within_days: Optional[int] = None,
     include_archived: bool = False,
+    filter: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -45,7 +46,13 @@ async def list_batches(
         q = q.where(Batch.quantity > 0)
     if product_id:
         q = q.where(Batch.product_id == product_id)
-    if expiring_within_days is not None:
+    if filter == "urgent":
+        threshold = datetime.date.today() + datetime.timedelta(days=settings.EXPIRY_URGENT_THRESHOLD)
+        q = q.where(Batch.expiry_date <= threshold)
+    elif filter == "planned":
+        threshold = datetime.date.today() + datetime.timedelta(days=settings.EXPIRY_PLANNED_THRESHOLD)
+        q = q.where(Batch.expiry_date <= threshold)
+    elif expiring_within_days is not None:
         threshold = datetime.date.today() + datetime.timedelta(days=expiring_within_days)
         q = q.where(Batch.expiry_date <= threshold)
     result = await db.execute(q.order_by(Batch.expiry_date))

@@ -203,9 +203,8 @@ export default function ConsumptionPage() {
             <Select
               label="Продукт *"
               value={form.product_id}
-              onChange={e => setForm({ ...form, product_id: e.target.value })}
+              onChange={(e: any) => setForm({ ...form, product_id: e.target.value })}
               options={products.map(p => ({ value: p.id.toString(), label: p.name }))}
-              placeholder="Выберите продукт"
             />
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
               <Input label="Количество *" type="number" min="0.01" step="0.01" value={form.quantity_used} onChange={e => setForm({ ...form, quantity_used: e.target.value })} />

@@ -50,7 +50,7 @@ export default function NotificationsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
         {/* Urgent */}
         <Card style={{ padding: '18px 16px', border: `1px solid #FECACA` }}>
-          <div style={{ display: 'flex', align: 'center', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 15, color: '#DC2626', marginBottom: 4 }}>⚠️ Срочные уведомления</div>
               <div style={{ fontSize: 13, color: T.sub }}>

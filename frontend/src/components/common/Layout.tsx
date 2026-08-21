@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { appRoutes } from '../../routes';
 import { T } from './UI';
+import type { FC } from 'react';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Администратор',

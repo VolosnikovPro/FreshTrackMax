@@ -229,7 +229,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
 }
 
 // ─── StatCard ─────────────────────────────────────────────────────────────────
-export function StatCard({ label, value, color, icon }: { label: string; value: string | number; color?: string; icon?: ReactNode }) {
+export function StatCard({ label, value, color, icon }: { label: string; value: string | number; color?: string; icon?: any }) {
   return (
     <Card style={{ padding: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

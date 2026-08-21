@@ -1,6 +1,7 @@
 import React, { lazy } from 'react';
 import { UserRole } from '../types';
 import { LayoutDashboard, Package, CalendarClock, DollarSign, Flame, Users2, Bell, ShieldCheck } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 const DashboardPage     = lazy(() => import('../pages/DashboardPage'));
 const ProductsPage      = lazy(() => import('../pages/ProductsPage'));
@@ -14,7 +15,7 @@ const AdminPage         = lazy(() => import('../pages/AdminPage'));
 export interface RouteConfig {
   path: string;
   label: string;
-  icon: React.ComponentType<{ size?: number }>;
+  icon: LucideIcon;
   element: React.LazyExoticComponent<() => JSX.Element>;
   allowedRoles: UserRole[];
   inNav: boolean;
