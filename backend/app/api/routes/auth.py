@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.database import get_db
 from app.models.user import User, UserRole
+from app.models.site import Site
 from app.schemas import LocalLoginRequest, TokenResponse, UserOut, MaxAuthRequest
 from app.core.security import verify_password, create_access_token, hash_password
 from app.core.config import settings
@@ -60,18 +61,27 @@ async def max_auth(data: MaxAuthRequest, db: AsyncSession = Depends(get_db)):
 async def seed_admin(db: AsyncSession = Depends(get_db)):
     """
     One-time admin seeding endpoint. Disable in production.
-    Creates admin user with password 'admin123' if not exists.
+    Creates a default site and admin user with password 'admin123' if not exists.
     """
     result = await db.execute(select(User).where(User.username == "admin"))
     existing = result.scalar_one_or_none()
     if existing:
         return {"detail": "Admin already exists"}
 
+    # Ensure a default site exists for the admin
+    site_result = await db.execute(select(Site).where(Site.code == "DEFAULT"))
+    site = site_result.scalar_one_or_none()
+    if site is None:
+        site = Site(name="Основной объект", code="DEFAULT", is_active=True)
+        db.add(site)
+        await db.flush()
+
     admin = User(
         username="admin",
         display_name="Administrator",
         role=UserRole.admin,
         max_user_id="local-admin",
+        site_id=site.id,
         hashed_password=hash_password("admin123"),
     )
     db.add(admin)
