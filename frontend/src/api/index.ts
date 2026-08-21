@@ -62,6 +62,8 @@ export const consumptionApi = {
   create: (data: object) => api.post('/consumption/', data),
   update: (id: number, data: object) => api.put(`/consumption/${id}`, data),
   delete: (id: number) => api.delete(`/consumption/${id}`),
+  stockCheck: (productId: number, quantity: number) =>
+    api.get(`/consumption/stock-check/${productId}`, { params: { quantity } }),
 };
 
 export const headcountApi = {
@@ -83,6 +85,7 @@ export const notificationsApi = {
   triggerUrgent: () => api.post('/notifications/trigger/urgent'),
   triggerPlanned: () => api.post('/notifications/trigger/planned'),
   config: () => api.get('/notifications/config'),
+  logs: (params?: object) => api.get('/notifications/logs', { params }),
 };
 
 export const sitesApi = {
@@ -104,13 +107,4 @@ export const sheetsApi = {
   importSheets: (body: { url_or_id: string; import_type: string; sheet_name?: string }) =>
     api.post('/sheets/import/sheets', body),
   types: () => api.get('/sheets/import/types'),
-};
-
-export const consumptionApi = {
-  list: (params?: object) => api.get('/consumption/', { params }),
-  create: (data: object) => api.post('/consumption/', data),
-  update: (id: number, data: object) => api.put(`/consumption/${id}`, data),
-  delete: (id: number) => api.delete(`/consumption/${id}`),
-  stockCheck: (productId: number, quantity: number) =>
-    api.get(`/consumption/stock-check/${productId}`, { params: { quantity } }),
 };

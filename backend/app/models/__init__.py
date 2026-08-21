@@ -3,6 +3,7 @@ from app.models.site import Site
 from app.models.product import Product
 from app.models.batch import Batch
 from app.models.consumption import RawMaterialCost, DailyConsumption, DailyHeadcount
+from app.models.notification import NotificationLog, NotificationType
 
 # Aliases
 cost = RawMaterialCost
@@ -14,4 +15,5 @@ __all__ = [
     "Product",
     "Batch",
     "RawMaterialCost", "DailyConsumption", "DailyHeadcount",
+    "NotificationLog", "NotificationType",
 ]

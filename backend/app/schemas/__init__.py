@@ -263,6 +263,20 @@ class NotificationTriggerResponse(BaseModel):
     products_included: int
 
 
+class NotificationLogOut(BaseModel):
+    id: int
+    site_id: int
+    notification_type: str
+    products_count: int
+    recipients_count: int
+    sent_count: int
+    message_text: Optional[str]
+    triggered_by: Optional[int]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ─── Google Sheets ────────────────────────────────────────────────────────────
 
 class SheetsImportRequest(BaseModel):

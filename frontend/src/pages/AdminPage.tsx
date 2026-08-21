@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { adminApi, sheetsApi, sitesApi } from '../api';
-import { User, UserRole, Site } from '../types';
+import { adminApi, sheetsApi, sitesApi, notificationsApi } from '../api';
+import { User, UserRole, Site, NotificationLog } from '../types';
 import { Card, Modal, Input, Select, Loading, ErrorMsg, Badge, T } from '../components/common/UI';
-import { Pencil, Upload, Users, FileSpreadsheet, Trash, Building2, Plus } from 'lucide-react';
+import { Pencil, Upload, Users, FileSpreadsheet, Trash, Building2, Plus, Bell, MessageSquare } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { format, parseISO } from 'date-fns';
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Администратор' },
@@ -23,7 +24,7 @@ const IMPORT_TYPES = [
   { value: 'cost_sheet', label: 'Себестоимость расхода сырья' },
 ];
 
-type Tab = 'users' | 'sites' | 'import';
+type Tab = 'users' | 'sites' | 'import' | 'notifications';
 
 export default function AdminPage() {
   const { hasRole } = useAuth();
@@ -32,6 +33,7 @@ export default function AdminPage() {
 
   const [users, setUsers] = useState<User[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  const [notifications, setNotifications] = useState<NotificationLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -54,6 +56,9 @@ export default function AdminPage() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
 
+  // Notifications state
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+
   const loadData = () => {
     setLoading(true);
     Promise.all([
@@ -62,6 +67,18 @@ export default function AdminPage() {
     ]).catch(() => setError('Ошибка загрузки')).finally(() => setLoading(false));
   };
   useEffect(() => { loadData(); }, []);
+
+  const loadNotifications = async () => {
+    setLoadingNotifications(true);
+    try {
+      const res = await notificationsApi.logs({ limit: 100 });
+      setNotifications(res.data);
+    } catch (e) {
+      console.error('Failed to load notifications', e);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
 
   const openCreateUser = () => {
     setEditingUser(null);
@@ -153,6 +170,7 @@ export default function AdminPage() {
           ['users', <Users size={15} />, 'Пользователи'],
           ['sites', <Building2 size={15} />, 'Объекты'],
           ['import', <FileSpreadsheet size={15} />, 'Импорт данных'],
+          ['notifications', <Bell size={15} />, 'Уведомления'],
         ] as const).map(([t, icon, label]) => (
           <button key={t} onClick={() => setTab(t as Tab)} style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -366,6 +384,63 @@ export default function AdminPage() {
               <div>• <b>Риск-Отчет</b> — колонки: Наименование товаров, Ед. Изм., Количество, Срок годности</div>
               <div>• <b>Себестоимость</b> — строка 5 с заголовком Код / Товар / Ед. изм. / Цена, данные с 7-й строки</div>
             </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Notifications tab ── */}
+      {tab === 'notifications' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Card style={{ padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>История отправленных уведомлений</div>
+              <button onClick={loadNotifications} disabled={loadingNotifications} style={{
+                padding: '8px 14px', borderRadius: 8, border: `1px solid ${T.border}`,
+                background: '#fff', color: T.sub, fontSize: 12, fontWeight: 600,
+                cursor: loadingNotifications ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+              }}>
+                {loadingNotifications ? '⏳ Обновление...' : '🔄 Обновить'}
+              </button>
+            </div>
+
+            {loadingNotifications ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: T.sub }}>Загрузка...</div>
+            ) : notifications.length === 0 ? (
+              <Card style={{ padding: 24, textAlign: 'center' }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>🔔</div>
+                <div style={{ fontWeight: 600, color: T.sub }}>Нет записей об уведомлениях</div>
+              </Card>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {notifications.map(n => (
+                  <Card key={n.id} style={{ padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                          <Badge color={n.notification_type === 'urgent' ? 'red' : 'yellow'}>
+                            {n.notification_type === 'urgent' ? '⚠️ Срочное' : '📋 Плановое'}
+                          </Badge>
+                          <span style={{ fontSize: 12, color: T.sub }}>
+                            {format(parseISO(n.created_at), 'dd.MM.yyyy HH:mm')}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: T.sub, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          <span>📦 Продуктов: {n.products_count}</span>
+                          <span>👥 Получателей: {n.recipients_count}</span>
+                          <span>✅ Отправлено: {n.sent_count}</span>
+                        </div>
+                        {n.message_text && (
+                          <details style={{ marginTop: 8, cursor: 'pointer' }}>
+                            <summary style={{ fontSize: 11, color: T.muted, fontWeight: 500 }}>Показать текст сообщения</summary>
+                            <pre style={{ fontSize: 11, color: T.sub, background: T.bg, padding: '8px', borderRadius: 6, marginTop: 4, whiteSpace: 'pre-wrap', overflow: 'auto', maxHeight: 200 }}>{n.message_text}</pre>
+                          </details>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
           </Card>
         </div>
       )}

@@ -99,3 +99,15 @@ export interface NotificationResult {
   recipients: string[];
   products_included: number;
 }
+
+export interface NotificationLog {
+  id: number;
+  site_id: number;
+  notification_type: string;
+  products_count: number;
+  recipients_count: number;
+  sent_count: number;
+  message_text: string | null;
+  triggered_by: number | null;
+  created_at: string;
+}
