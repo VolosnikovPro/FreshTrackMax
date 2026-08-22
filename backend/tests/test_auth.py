@@ -113,3 +113,36 @@ def test_admin_can_create_user(seeded_client, auth_header):
     assert resp.status_code in (200, 201), resp.text
     assert resp.json()["username"] == "newuser"
     assert resp.json()["role"] == "storekeeper"
+
+
+def test_sites_endpoints_registered_and_crud(seeded_client, auth_header):
+    """Sites CRUD is wired into the app router and admin can manage sites."""
+    # list
+    resp = seeded_client.get("/api/sites/", headers=auth_header)
+    assert resp.status_code in (200, 201), resp.text
+    assert any(s["code"] == "TEST" for s in resp.json())
+
+    # create
+    resp = seeded_client.post(
+        "/api/sites/",
+        headers=auth_header,
+        json={"name": "Филиал 2", "code": "BR2", "is_active": True},
+    )
+    assert resp.status_code in (200, 201), resp.text
+    site_id = resp.json()["id"]
+    assert resp.json()["code"] == "BR2"
+
+    # get
+    resp = seeded_client.get(f"/api/sites/{site_id}", headers=auth_header)
+    assert resp.status_code in (200, 201)
+
+    # update
+    resp = seeded_client.put(
+        f"/api/sites/{site_id}", headers=auth_header, json={"name": "Филиал 2 (изменён)"}
+    )
+    assert resp.status_code in (200, 201)
+    assert resp.json()["name"] == "Филиал 2 (изменён)"
+
+    # delete
+    resp = seeded_client.delete(f"/api/sites/{site_id}", headers=auth_header)
+    assert resp.status_code in (200, 201, 204)

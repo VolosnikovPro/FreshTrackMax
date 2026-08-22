@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.config import LOGGING_CONFIG
 from app.api.routes import (
     auth, products, batches, costs, consumption,
-    headcount, notifications, admin, sheets
+    headcount, notifications, admin, sheets, sites
 )
 from app.core.config import settings
 from app.db.database import create_tables
@@ -38,6 +38,7 @@ app.include_router(headcount.router, prefix="/api/headcount", tags=["headcount"]
 app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(sheets.router, prefix="/api/sheets", tags=["sheets"])
+app.include_router(sites.router, prefix="/api/sites", tags=["sites"])
 
 
 @app.get("/health")
