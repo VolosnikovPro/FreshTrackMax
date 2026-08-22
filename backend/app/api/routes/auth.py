@@ -80,7 +80,7 @@ async def seed_admin(db: AsyncSession = Depends(get_db)):
         username="admin",
         display_name="Administrator",
         role=UserRole.admin,
-        max_user_id="local-admin",
+        max_user_id=-1,
         site_id=site.id,
         hashed_password=hash_password("admin123"),
     )
