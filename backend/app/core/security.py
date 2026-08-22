@@ -3,7 +3,9 @@ from typing import Optional
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
+from app.db.database import get_db
 import bcrypt
 
 
@@ -34,9 +36,14 @@ def decode_token(token: str) -> dict:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Dependency — returns the current user payload from JWT."""
-    from app.db.database import AsyncSessionLocal
+    """Dependency — returns the current user payload from JWT.
+
+    Uses the request's DB session (from get_db) rather than opening a new one,
+    so it respects any get_db override (e.g. in tests) and shares the
+    per-request transaction.
+    """
     from app.models.user import User
     from sqlalchemy import select
 
@@ -45,12 +52,11 @@ async def get_current_user(
     if user_id is None:
         raise HTTPException(status_code=401, detail="Invalid token payload")
 
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-        if not user or not user.is_active:
-            raise HTTPException(status_code=401, detail="User not found or inactive")
-        return user
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="User not found or inactive")
+    return user
 
 
 def require_roles(*roles: str):

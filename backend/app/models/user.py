@@ -16,7 +16,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"), index=True)
-    max_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    max_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, unique=True, index=True)
     username: Mapped[str] = mapped_column(String(128), unique=True)
     display_name: Mapped[str] = mapped_column(String(256), default="")
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.storekeeper)

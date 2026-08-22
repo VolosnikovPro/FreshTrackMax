@@ -112,6 +112,7 @@ async def trigger_notifications(
     )
     db.add(log_entry)
     await db.flush()
+    await db.commit()
 
     return NotificationTriggerResponse(
         sent=sent_count,
