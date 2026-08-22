@@ -3,10 +3,12 @@ import { headcountApi } from '../api';
 import { DailyHeadcount } from '../types';
 import { Card, FAB, Modal, Input, Loading, ErrorMsg, T } from '../components/common/UI';
 import { useAuth } from '../hooks/useAuth';
+import { useSite } from '../hooks/useSite';
 import { format, parseISO } from 'date-fns';
 
 export default function HeadcountPage() {
   const { hasRole, user } = useAuth();
+  const { currentSiteId } = useSite();
   const role = user?.role;
   const isAdmin = role === 'admin';
   const isManager = role === 'manager';
@@ -25,7 +27,7 @@ export default function HeadcountPage() {
   const load = () => {
     setLoading(true);
     Promise.all([
-      headcountApi.list().then(r => setEntries(r.data)),
+      headcountApi.list(currentSiteId ? { site_id: currentSiteId } : undefined).then(r => setEntries(r.data)),
       headcountApi.today().then(r => setTodayEntry(r.data)).catch(() => setTodayEntry(null)),
     ]).catch(() => setError('Ошибка загрузки')).finally(() => setLoading(false));
   };

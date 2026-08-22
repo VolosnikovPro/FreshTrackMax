@@ -33,7 +33,7 @@ export const authApi = {
 };
 
 export const productsApi = {
-  list: (activeOnly = true) => api.get('/products/', { params: { active_only: activeOnly } }),
+  list: (activeOnly = true, siteId?: number | null) => api.get('/products/', { params: { active_only: activeOnly, ...(siteId ? { site_id: siteId } : {}) } }),
   get: (id: number) => api.get(`/products/${id}`),
   create: (data: object) => api.post('/products/', data),
   update: (id: number, data: object) => api.put(`/products/${id}`, data),
@@ -51,7 +51,7 @@ export const batchesApi = {
 };
 
 export const costsApi = {
-  list: (productId?: number) => api.get('/costs/', { params: productId ? { product_id: productId } : {} }),
+  list: (productId?: number, siteId?: number | null) => api.get('/costs/', { params: { ...(productId ? { product_id: productId } : {}), ...(siteId ? { site_id: siteId } : {}) } }),
   create: (data: object) => api.post('/costs/', data),
   update: (id: number, data: object) => api.put(`/costs/${id}`, data),
   delete: (id: number) => api.delete(`/costs/${id}`),

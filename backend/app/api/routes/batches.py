@@ -19,8 +19,15 @@ _storekeeper_plus = require_roles(
 )
 
 
-def _get_site_id(user: User) -> int:
-    """Get site_id from user, defaulting to 1 if not set (for backward compatibility)."""
+def _get_site_id(user: User, request_site_id: Optional[int] = None) -> int:
+    """Resolve the effective site_id.
+
+    Admin/manager may pass `request_site_id` to view another site's data
+    (e.g. via the frontend site switcher). Other roles are always scoped to
+    their own `user.site_id`.
+    """
+    if request_site_id is not None and user.role in (UserRole.admin, UserRole.manager):
+        return request_site_id
     return user.site_id or 1
 
 
@@ -37,10 +44,11 @@ async def list_batches(
     expiring_within_days: Optional[int] = None,
     include_archived: bool = False,
     filter: Optional[str] = None,
+    site_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    site_id = _get_site_id(current_user)
+    site_id = _get_site_id(current_user, site_id)
     q = select(Batch).options(selectinload(Batch.product)).where(Batch.site_id == site_id)
     if not include_archived:
         q = q.where(Batch.quantity > 0)

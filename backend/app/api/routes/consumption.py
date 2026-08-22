@@ -20,8 +20,15 @@ router = APIRouter()
 _writer = require_roles(UserRole.admin, UserRole.manager, UserRole.nutrition_manager)
 
 
-def _get_site_id(user: User) -> int:
-    """Get site_id from user, defaulting to 1 if not set (for backward compatibility)."""
+def _get_site_id(user: User, request_site_id: Optional[int] = None) -> int:
+    """Resolve the effective site_id.
+
+    Admin/manager may pass `request_site_id` to view another site's data
+    (e.g. via the frontend site switcher). Other roles are always scoped to
+    their own `user.site_id`.
+    """
+    if request_site_id is not None and user.role in (UserRole.admin, UserRole.manager):
+        return request_site_id
     return user.site_id or 1
 
 
@@ -35,10 +42,11 @@ def _enrich(c: DailyConsumption) -> ConsumptionOut:
 async def list_consumption(
     date: Optional[datetime.date] = None,
     product_id: Optional[int] = None,
+    site_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    site_id = _get_site_id(current_user)
+    site_id = _get_site_id(current_user, site_id)
     q = select(DailyConsumption).options(selectinload(DailyConsumption.product)).where(
         DailyConsumption.site_id == site_id
     )

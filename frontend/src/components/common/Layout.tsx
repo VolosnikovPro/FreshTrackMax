@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { useSite } from '../../hooks/useSite';
 import { appRoutes } from '../../routes';
 import { T } from './UI';
 import type { FC } from 'react';
@@ -14,7 +15,9 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function Layout() {
   const { user, logout, hasRole } = useAuth();
+  const { sites, currentSite, currentSiteId, setCurrentSiteId } = useSite();
   const navigate = useNavigate();
+  const canSwitchSite = hasRole('admin', 'manager');
 
   const navItems = appRoutes.filter(({ inNav, allowedRoles }) =>
     inNav && (allowedRoles.length === 0 || allowedRoles.some(r => hasRole(r)))
@@ -38,6 +41,29 @@ export default function Layout() {
             fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', color: '#fff',
           }}>FRESH</span>
           <span style={{ fontWeight: 800, fontSize: 16, color: T.text }}>Track</span>
+          {currentSite && (
+            canSwitchSite ? (
+              <select
+                value={currentSiteId ?? ''}
+                onChange={(e) => setCurrentSiteId(Number(e.target.value))}
+                style={{
+                  marginLeft: 6, fontSize: 12, fontWeight: 600, color: T.text,
+                  border: `1px solid ${T.border}`, borderRadius: 8, padding: '4px 6px',
+                  background: T.bg, fontFamily: 'inherit', cursor: 'pointer',
+                }}
+                title="Выберите объект"
+              >
+                {sites.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            ) : (
+              <span style={{
+                marginLeft: 6, fontSize: 12, fontWeight: 600, color: T.sub,
+                background: T.bg, border: `1px solid ${T.border}`, borderRadius: 8, padding: '4px 8px',
+              }}>{currentSite.name}</span>
+            )
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ textAlign: 'right' }}>

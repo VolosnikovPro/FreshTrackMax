@@ -4,12 +4,14 @@ import { DailyConsumption, Product } from '../types';
 import { Card, FAB, Modal, Input, Select, Loading, ErrorMsg, T } from '../components/common/UI';
 import { Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useSite } from '../hooks/useSite';
 import { format, parseISO } from 'date-fns';
 
 const UNITS = ['кг','л','шт','г','мл','уп'].map(u => ({ value: u, label: u }));
 
 export default function ConsumptionPage() {
   const { hasRole, user } = useAuth();
+  const { currentSiteId } = useSite();
   const role = user?.role;
   const isManager = role === 'manager';  // УПП - only date + total amount
   const isStorekeeper = role === 'storekeeper';
@@ -37,8 +39,8 @@ export default function ConsumptionPage() {
   const load = () => {
     setLoading(true);
     Promise.all([
-      consumptionApi.list().then(r => setEntries(r.data)),
-      productsApi.list(true).then(r => setProducts(r.data)),
+      consumptionApi.list(currentSiteId ? { site_id: currentSiteId } : undefined).then(r => setEntries(r.data)),
+      productsApi.list(true, currentSiteId).then(r => setProducts(r.data)),
     ]).catch(() => setError('Ошибка загрузки')).finally(() => setLoading(false));
   };
 

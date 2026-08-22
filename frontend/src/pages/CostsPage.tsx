@@ -4,10 +4,12 @@ import { RawMaterialCost, Product } from '../types';
 import { Card, FAB, Modal, Input, Select, Loading, ErrorMsg, T } from '../components/common/UI';
 import { Pencil } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useSite } from '../hooks/useSite';
 import { format, parseISO } from 'date-fns';
 
 export default function CostsPage() {
   const { hasRole, user } = useAuth();
+  const { currentSiteId } = useSite();
   const role = user?.role;
   const isAdmin = role === 'admin';
   const isManager = role === 'manager';
@@ -25,8 +27,8 @@ export default function CostsPage() {
   const [form, setForm] = useState({ product_id: '', cost_per_unit: '', currency: 'RUB', effective_date: today, notes: '' });
 
   const load = () => Promise.all([
-    costsApi.list().then(r => setCosts(r.data)),
-    productsApi.list(true).then(r => setProducts(r.data)),
+    costsApi.list(undefined, currentSiteId).then(r => setCosts(r.data)),
+    productsApi.list(true, currentSiteId).then(r => setProducts(r.data)),
   ]).catch(() => setError('Ошибка загрузки')).finally(() => setLoading(false));
 
   useEffect(() => { load(); }, []);

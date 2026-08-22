@@ -4,6 +4,7 @@ import { Batch, Product } from '../types';
 import { Card, FAB, FilterTabs, Modal, Input, Select, Loading, ErrorMsg, ExpiryBadge, T } from '../components/common/UI';
 import { Pencil, Trash2, Search } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useSite } from '../hooks/useSite';
 import { format, parseISO } from 'date-fns';
 
 const emptyForm = { product_id: '', batch_number: '', quantity: '', unit: 'кг', expiry_date: '', received_date: '', notes: '' };
@@ -12,6 +13,7 @@ type Filter = 'all' | 'urgent' | 'planned';
 
 export default function BatchesPage() {
   const { hasRole, user } = useAuth();
+  const { currentSiteId } = useSite();
   const role = user?.role;
   const canWrite = hasRole('admin', 'storekeeper');  // Admin and Storekeeper can add
   const canEdit = hasRole('admin');  // Only admin can edit existing batches
@@ -31,8 +33,8 @@ export default function BatchesPage() {
   const load = () => {
     setLoading(true);
     Promise.all([
-      batchesApi.list({ filter }).then(r => setBatches(r.data)),
-      productsApi.list(true).then(r => setProducts(r.data)),
+      batchesApi.list({ filter, ...(currentSiteId ? { site_id: currentSiteId } : {}) }).then(r => setBatches(r.data)),
+      productsApi.list(true, currentSiteId).then(r => setProducts(r.data)),
     ]).catch(() => setError('Ошибка загрузки')).finally(() => setLoading(false));
   };
 

@@ -4,12 +4,14 @@ import { Product } from '../types';
 import { Card, FAB, FilterTabs, Modal, Input, Select, Loading, ErrorMsg, Badge, T } from '../components/common/UI';
 import { Pencil } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useSite } from '../hooks/useSite';
 
 const UNITS = ['кг','л','шт','г','мл','уп','кор','пач'].map(u => ({ value: u, label: u }));
 type Filter = 'active' | 'all';
 
 export default function ProductsPage() {
   const { hasRole, user } = useAuth();
+  const { currentSiteId } = useSite();
   const role = user?.role;
   const canWrite = hasRole('admin', 'storekeeper');
   const canView = hasRole('admin', 'manager', 'storekeeper', 'nutrition_manager');
@@ -27,7 +29,7 @@ export default function ProductsPage() {
 
   const load = () => {
     setLoading(true);
-    productsApi.list(filter === 'active')
+    productsApi.list(filter === 'active', currentSiteId)
       .then(r => setProducts(r.data))
       .catch(() => setError('Ошибка загрузки'))
       .finally(() => setLoading(false));

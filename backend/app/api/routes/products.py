@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
+from typing import List, Optional
 from app.db.database import get_db
 from app.models.product import Product
 from app.schemas import ProductCreate, ProductUpdate, ProductOut
@@ -12,18 +12,26 @@ router = APIRouter()
 _admin_or_manager = require_roles(UserRole.admin, UserRole.manager, UserRole.nutrition_manager)
 
 
-def _get_site_id(user: User) -> int:
-    """Get site_id from user, defaulting to 1 if not set (for backward compatibility)."""
+def _get_site_id(user: User, request_site_id: Optional[int] = None) -> int:
+    """Resolve the effective site_id.
+
+    Admin/manager may pass `request_site_id` to view another site's data
+    (e.g. via the frontend site switcher). Other roles are always scoped to
+    their own `user.site_id`.
+    """
+    if request_site_id is not None and user.role in (UserRole.admin, UserRole.manager):
+        return request_site_id
     return user.site_id or 1
 
 
 @router.get("/", response_model=List[ProductOut])
 async def list_products(
     active_only: bool = True,
+    site_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    site_id = _get_site_id(current_user)
+    site_id = _get_site_id(current_user, site_id)
     q = select(Product).where(Product.site_id == site_id)
     if active_only:
         q = q.where(Product.is_active == True)

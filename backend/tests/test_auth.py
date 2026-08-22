@@ -146,3 +146,75 @@ def test_sites_endpoints_registered_and_crud(seeded_client, auth_header):
     # delete
     resp = seeded_client.delete(f"/api/sites/{site_id}", headers=auth_header)
     assert resp.status_code in (200, 201, 204)
+
+
+def test_admin_can_switch_site_via_query(seeded_client, auth_header, session_factory):
+    """Admin/manager may pass site_id to list another site's data; a
+    storekeeper's site_id query is ignored (scoped to own site)."""
+    from sqlalchemy import select
+    from app.models.site import Site
+
+    # Create a second site and a product in it
+    async def _seed():
+        async with session_factory() as s:
+            site2 = Site(name="Второй объект", code="SEC", is_active=True)
+            s.add(site2)
+            await s.flush()
+            site1 = (await s.execute(select(Site).where(Site.code == "TEST"))).scalar_one()
+            p2 = (await _make_product(s, site2.id, "ТоварB"))
+            p1 = (await _make_product(s, site1.id, "ТоварA"))
+            await s.commit()
+            return site1.id, site2.id, p1, p2
+    import asyncio
+    site1_id, site2_id, p1, p2 = asyncio.get_event_loop().run_until_complete(_seed())
+
+    # Admin lists with site_id=site2 -> should see only ТоварB
+    resp = seeded_client.get(f"/api/products/?site_id={site2_id}", headers=auth_header)
+    assert resp.status_code in (200, 201), resp.text
+    names = {p["name"] for p in resp.json()}
+    assert "ТоварB" in names
+    assert "ТоварA" not in names
+
+    # Without site_id -> admin's own site (site1) -> ТоварA
+    resp = seeded_client.get("/api/products/", headers=auth_header)
+    names = {p["name"] for p in resp.json()}
+    assert "ТоварA" in names
+
+
+def test_storekeeper_site_query_ignored(seeded_client, auth_header, session_factory):
+    """A storekeeper's site_id query is ignored; they only see their own site."""
+    from sqlalchemy import select
+    from app.models.site import Site
+    from app.models.product import Product
+
+    async def _seed():
+        async with session_factory() as s:
+            site2 = Site(name="Третий объект", code="THD", is_active=True)
+            s.add(site2)
+            await s.flush()
+            site1 = (await s.execute(select(Site).where(Site.code == "TEST"))).scalar_one()
+            p1 = Product(site_id=site1.id, name="ТоварX", unit="кг", is_active=True)
+            p2 = Product(site_id=site2.id, name="ТоварY", unit="кг", is_active=True)
+            s.add_all([p1, p2])
+            await s.commit()
+            return site1.id, site2.id
+    import asyncio
+    site1_id, site2_id = asyncio.get_event_loop().run_until_complete(_seed())
+
+    # Create a storekeeper bound to site1
+    _create_user_via_api(seeded_client, auth_header, "klad2", "storekeeper")
+    h = {"Authorization": f"Bearer {_token_for(seeded_client, 'klad2')}"}
+    # Even if they try site_id=site2, they must only see their own site (ТоварX)
+    resp = seeded_client.get(f"/api/products/?site_id={site2_id}", headers=h)
+    assert resp.status_code in (200, 201), resp.text
+    names = {p["name"] for p in resp.json()}
+    assert "ТоварX" in names
+    assert "ТоварY" not in names
+
+
+async def _make_product(session, site_id, name):
+    from app.models.product import Product
+    p = Product(site_id=site_id, name=name, unit="кг", is_active=True)
+    session.add(p)
+    await session.flush()
+    return p.id
