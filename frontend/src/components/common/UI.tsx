@@ -230,6 +230,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
 
 // ─── StatCard ─────────────────────────────────────────────────────────────────
 export function StatCard({ label, value, color, icon }: { label: string; value: string | number; color?: string; icon?: any }) {
+  const Icon = icon;
   return (
     <Card style={{ padding: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -237,7 +238,7 @@ export function StatCard({ label, value, color, icon }: { label: string; value: 
           <div style={{ fontSize: 12, color: T.sub, fontWeight: 500, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
           <div style={{ fontSize: 26, fontWeight: 800, color: color || T.text, lineHeight: 1 }}>{value}</div>
         </div>
-        {icon && <div style={{ color: color || T.sub, opacity: 0.25, transform: 'scale(1.4)' }}>{icon}</div>}
+        {Icon && <div style={{ color: color || T.sub, opacity: 0.25, transform: 'scale(1.4)' }}><Icon size={20} /></div>}
       </div>
     </Card>
   );
