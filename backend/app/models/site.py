@@ -24,4 +24,5 @@ class Site(Base):
     costs = relationship("RawMaterialCost", back_populates="site", lazy="select")
     consumptions = relationship("DailyConsumption", back_populates="site", lazy="select")
     headcounts = relationship("DailyHeadcount", back_populates="site", lazy="select")
+    financial_expenses = relationship("DailyFinancialExpense", back_populates="site", lazy="select")
     notifications = relationship("NotificationLog", back_populates="site", lazy="select")

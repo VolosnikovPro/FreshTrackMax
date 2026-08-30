@@ -15,9 +15,9 @@ export default function BatchesPage() {
   const { hasRole, user } = useAuth();
   const { currentSiteId } = useSite();
   const role = user?.role;
-  const canWrite = hasRole('admin', 'storekeeper');  // Admin and Storekeeper can add
-  const canEdit = hasRole('admin');  // Only admin can edit existing batches
-  const canDelete = hasRole('admin', 'manager');  // Admin and Manager can delete
+  const canWrite = hasRole('superadmin', 'admin', 'storekeeper');
+  const canEdit = false;
+  const canDelete = hasRole('superadmin', 'admin');
   const isViewOnly = role === 'nutrition_manager';  // UOP - view only
 
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -38,7 +38,7 @@ export default function BatchesPage() {
     ]).catch(() => setError('Ошибка загрузки')).finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => { load(); }, [filter, currentSiteId]);
 
   const visible = batches.filter(b =>
     search === '' ||
@@ -70,8 +70,10 @@ export default function BatchesPage() {
     if (!form.product_id || !form.expiry_date || !form.quantity) { setError('Заполните обязательные поля'); return; }
     try {
       const payload = {
+        site_id: currentSiteId,
         product_id: Number(form.product_id),
         batch_number: form.batch_number || null,
+        upd_number: form.batch_number || null,
         quantity: Number(form.quantity),
         unit: form.unit,
         expiry_date: form.expiry_date,
@@ -93,7 +95,7 @@ export default function BatchesPage() {
     } catch { setError('Ошибка удаления'); }
   };
 
-  if (!hasRole('admin', 'manager', 'storekeeper', 'nutrition_manager')) {
+  if (!hasRole('superadmin', 'admin', 'manager', 'storekeeper', 'nutrition_manager')) {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: T.sub }}>
         <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>

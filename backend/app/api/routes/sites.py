@@ -9,8 +9,8 @@ from app.core.security import get_current_user, require_roles
 from app.models.user import UserRole, User
 
 router = APIRouter()
-_admin = require_roles(UserRole.admin)
-_admin_or_manager = require_roles(UserRole.admin, UserRole.manager)
+_admin = require_roles(UserRole.superadmin)
+_admin_or_manager = require_roles(UserRole.superadmin, UserRole.admin)
 
 
 def _get_site_id(user: User) -> int:
@@ -26,7 +26,7 @@ async def list_sites(
 ):
     site_id = _get_site_id(current_user)
     q = select(Site)
-    if current_user.role == UserRole.admin:
+    if current_user.role in (UserRole.superadmin, UserRole.admin):
         if active_only:
             q = q.where(Site.is_active == True)
     else:
@@ -43,7 +43,7 @@ async def get_site(
     current_user: User = Depends(get_current_user),
 ):
     user_site_id = _get_site_id(current_user)
-    if current_user.role != UserRole.admin and site_id != user_site_id:
+    if current_user.role not in (UserRole.superadmin, UserRole.admin) and site_id != user_site_id:
         raise HTTPException(403, "Access denied")
     site = await db.get(Site, site_id)
     if not site:

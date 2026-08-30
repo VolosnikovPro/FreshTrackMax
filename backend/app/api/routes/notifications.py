@@ -11,28 +11,25 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from app.db.database import get_db
 from app.models.batch import Batch
 from app.models.user import User, UserRole
 from app.models.site import Site
-from app.models.notification import NotificationLog, NotificationType
+from app.models.notification import NotificationLog, NotificationRecipientLog, NotificationType
 from app.schemas import NotificationTriggerResponse, NotificationLogOut
 from app.core.security import require_roles
 from app.core.config import settings
+from app.core.site_access import resolve_site_id
 
 router = APIRouter()
-_admin_manager = require_roles(UserRole.admin, UserRole.manager)
-_admin_only = require_roles(UserRole.admin)
+_notification_sender = require_roles(UserRole.superadmin, UserRole.admin, UserRole.storekeeper, UserRole.manager, UserRole.nutrition_manager)
+_admin_only = require_roles(UserRole.superadmin, UserRole.admin)
 
 
-def _get_site_id(user: User) -> int:
-    """Get site_id from user, defaulting to 1 if not set (for backward compatibility)."""
-    return user.site_id or 1
-
-
-NOTIFICATION_ROLES = {UserRole.admin, UserRole.manager, UserRole.storekeeper}
+NOTIFICATION_ROLES = {UserRole.superadmin, UserRole.admin, UserRole.manager, UserRole.storekeeper, UserRole.nutrition_manager}
 
 
 async def _send_max_message(max_user_id: str, text: str) -> bool:
@@ -64,14 +61,17 @@ async def trigger_notifications(
     title: str,
     site_id: int,
     triggered_by: Optional[int] = None,
+    period_key: Optional[str] = None,
 ) -> NotificationTriggerResponse:
     threshold = datetime.date.today() + datetime.timedelta(days=threshold_days)
     result = await db.execute(
         select(Batch).options(selectinload(Batch.product))
         .where(
             Batch.site_id == site_id,
+            Batch.status == "active",
             Batch.quantity > 0,
-            Batch.expiry_date <= threshold
+            Batch.expiry_date <= threshold,
+            *([] if threshold_days == settings.EXPIRY_URGENT_THRESHOLD else [Batch.expiry_date > datetime.date.today() + datetime.timedelta(days=settings.EXPIRY_URGENT_THRESHOLD)])
         )
         .order_by(Batch.expiry_date)
     )
@@ -81,37 +81,71 @@ async def trigger_notifications(
         return NotificationTriggerResponse(sent=0, recipients=[], products_included=0)
 
     message = _format_batch_list(batches, title)
+    notification_type = NotificationType.urgent if threshold_days == settings.EXPIRY_URGENT_THRESHOLD else NotificationType.planned
 
     users_result = await db.execute(
         select(User).where(
-            User.site_id == site_id,
+            ((User.site_id == site_id) | (User.role.in_({UserRole.superadmin, UserRole.admin}))),
             User.role.in_(NOTIFICATION_ROLES),
             User.is_active == True,
+            User.max_user_id.is_not(None),
         )
     )
     users = users_result.scalars().all()
+
+    # Claim a scheduled period before sending. A unique DB key makes this safe
+    # when several backend instances reach the same scheduled minute.
+    if period_key:
+        claim = NotificationLog(
+            site_id=site_id,
+            notification_type=notification_type,
+            products_count=len(batches),
+            recipients_count=len(users),
+            sent_count=0,
+            message_text=message,
+            triggered_by=triggered_by,
+            period_key=period_key,
+            status="processing",
+        )
+        db.add(claim)
+        try:
+            await db.flush()
+        except IntegrityError:
+            await db.rollback()
+            existing = (await db.execute(select(NotificationLog).where(NotificationLog.site_id == site_id, NotificationLog.notification_type == notification_type, NotificationLog.period_key == period_key))).scalar_one()
+            return NotificationTriggerResponse(sent=existing.sent_count, recipients=[], products_included=existing.products_count)
+        log_entry = claim
+    else:
+        log_entry = NotificationLog(
+            site_id=site_id,
+            notification_type=notification_type,
+            products_count=len(batches),
+            recipients_count=len(users),
+            sent_count=0,
+            message_text=message,
+            triggered_by=triggered_by,
+            status="processing",
+        )
+        db.add(log_entry)
+        await db.flush()
 
     sent_count = 0
     recipients = []
     for user in users:
         ok = await _send_max_message(str(user.max_user_id), message)
+        db.add(NotificationRecipientLog(
+            notification_id=log_entry.id,
+            user_id=user.id,
+            status="sent" if ok else "failed",
+            reason=None if ok else "MAX delivery failed",
+        ))
         if ok:
             sent_count += 1
             recipients.append(user.display_name or user.username)
 
-    # Log the notification
-    notification_type = NotificationType.urgent if threshold_days == settings.EXPIRY_URGENT_THRESHOLD else NotificationType.planned
-    log_entry = NotificationLog(
-        site_id=site_id,
-        notification_type=notification_type,
-        products_count=len(batches),
-        recipients_count=len(users),
-        sent_count=sent_count,
-        message_text=message,
-        triggered_by=triggered_by,
-    )
-    db.add(log_entry)
-    await db.flush()
+    log_entry.sent_count = sent_count
+    log_entry.status = "sent" if sent_count == len(users) else ("failed" if sent_count == 0 else "partial")
+    log_entry.reason = None if sent_count == len(users) else "Часть получателей недоступна"
     await db.commit()
 
     return NotificationTriggerResponse(
@@ -123,11 +157,12 @@ async def trigger_notifications(
 
 @router.post("/trigger/urgent", response_model=NotificationTriggerResponse)
 async def trigger_urgent(
+    site_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(_admin_manager),
+    current_user: User = Depends(_notification_sender),
 ):
     """Manually trigger urgent notifications (< 16 days) for current user's site."""
-    site_id = _get_site_id(current_user)
+    site_id = await resolve_site_id(db, current_user, site_id)
     return await trigger_notifications(
         db,
         settings.EXPIRY_URGENT_THRESHOLD,
@@ -139,11 +174,12 @@ async def trigger_urgent(
 
 @router.post("/trigger/planned", response_model=NotificationTriggerResponse)
 async def trigger_planned(
+    site_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(_admin_manager),
+    current_user: User = Depends(_notification_sender),
 ):
     """Manually trigger planned notifications (< 46 days) for current user's site."""
-    site_id = _get_site_id(current_user)
+    site_id = await resolve_site_id(db, current_user, site_id)
     return await trigger_notifications(
         db,
         settings.EXPIRY_PLANNED_THRESHOLD,
@@ -164,18 +200,15 @@ async def list_notification_logs(
     """Get notification logs (admin only)."""
     query = select(NotificationLog).order_by(desc(NotificationLog.created_at)).limit(limit).offset(offset)
 
-    if site_id is not None:
-        query = query.where(NotificationLog.site_id == site_id)
-    elif current_user.role != UserRole.admin:
-        # Non-admin users only see their site's logs
-        query = query.where(NotificationLog.site_id == _get_site_id(current_user))
+    effective_site_id = await resolve_site_id(db, current_user, site_id)
+    query = query.where(NotificationLog.site_id == effective_site_id)
 
     result = await db.execute(query)
     return result.scalars().all()
 
 
 @router.get("/config")
-async def get_config(_: object = Depends(_admin_manager)):
+async def get_config(_: object = Depends(_notification_sender)):
     return {
         "urgent_threshold_days": settings.EXPIRY_URGENT_THRESHOLD,
         "planned_threshold_days": settings.EXPIRY_PLANNED_THRESHOLD,

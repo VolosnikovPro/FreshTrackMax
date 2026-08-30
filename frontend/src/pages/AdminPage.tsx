@@ -4,6 +4,7 @@ import { User, UserRole, Site, NotificationLog } from '../types';
 import { Card, Modal, Input, Select, Loading, ErrorMsg, Badge, T } from '../components/common/UI';
 import { Pencil, Upload, Users, FileSpreadsheet, Trash, Building2, Plus, Bell, MessageSquare } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useSite } from '../hooks/useSite';
 import { format, parseISO } from 'date-fns';
 
 const ROLE_OPTIONS = [
@@ -13,22 +14,26 @@ const ROLE_OPTIONS = [
   { value: 'nutrition_manager', label: 'Управл. по питанию (УОП)' },
 ];
 const ROLE_LABELS: Record<UserRole, string> = {
+  superadmin: 'Главный администратор',
   admin: 'Администратор', manager: 'Управляющий (УПП)',
   storekeeper: 'Кладовщик', nutrition_manager: 'Управл. по питанию (УОП)',
 };
 const ROLE_COLORS: Record<UserRole, 'blue' | 'green' | 'yellow' | 'gray'> = {
+  superadmin: 'blue',
   admin: 'blue', manager: 'green', storekeeper: 'yellow', nutrition_manager: 'gray',
 };
 const IMPORT_TYPES = [
   { value: 'risk_report', label: 'Риск-Отчет (партии + сроки)' },
   { value: 'cost_sheet', label: 'Себестоимость расхода сырья' },
+  { value: 'consumption_file', label: 'Расход сырья (FEFO, атомарно)' },
 ];
 
 type Tab = 'users' | 'sites' | 'import' | 'notifications';
 
 export default function AdminPage() {
   const { hasRole } = useAuth();
-  const isAdmin = hasRole('admin');
+  const { currentSiteId } = useSite();
+  const isAdmin = hasRole('superadmin');
   const [tab, setTab] = useState<Tab>('users');
 
   const [users, setUsers] = useState<User[]>([]);
@@ -146,10 +151,10 @@ export default function AdminPage() {
       let res;
       if (importSource === 'file') {
         if (!importFile) { setError('Выберите файл'); setImporting(false); return; }
-        res = await sheetsApi.importFile(importFile, importType);
+        res = await sheetsApi.importFile(importFile, importType, currentSiteId);
       } else {
         if (!sheetsUrl) { setError('Введите ссылку на таблицу'); setImporting(false); return; }
-        res = await sheetsApi.importSheets({ url_or_id: sheetsUrl, import_type: importType, sheet_name: sheetName });
+        res = await sheetsApi.importSheets({ url_or_id: sheetsUrl, import_type: importType, sheet_name: sheetName, site_id: currentSiteId });
       }
       setImportResult(res.data);
     } catch (e: any) {

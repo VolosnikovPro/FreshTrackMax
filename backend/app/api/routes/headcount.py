@@ -8,21 +8,11 @@ from app.models.consumption import DailyHeadcount
 from app.schemas import HeadcountCreate, HeadcountUpdate, HeadcountOut
 from app.core.security import get_current_user, require_roles
 from app.models.user import UserRole, User
+from app.core.site_access import resolve_site_id
 
 router = APIRouter()
-_writer = require_roles(UserRole.admin, UserRole.manager)
-
-
-def _get_site_id(user: User, request_site_id: Optional[int] = None) -> int:
-    """Resolve the effective site_id.
-
-    Admin/manager may pass `request_site_id` to view another site's data
-    (e.g. via the frontend site switcher). Other roles are always scoped to
-    their own `user.site_id`.
-    """
-    if request_site_id is not None and user.role in (UserRole.admin, UserRole.manager):
-        return request_site_id
-    return user.site_id or 1
+_writer = require_roles(UserRole.manager)
+_reader = require_roles(UserRole.superadmin, UserRole.admin, UserRole.manager, UserRole.nutrition_manager)
 
 
 @router.get("/", response_model=List[HeadcountOut])
@@ -31,9 +21,9 @@ async def list_headcounts(
     end_date: Optional[datetime.date] = None,
     site_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_reader),
 ):
-    site_id = _get_site_id(current_user, site_id)
+    site_id = await resolve_site_id(db, current_user, site_id)
     q = select(DailyHeadcount).where(DailyHeadcount.site_id == site_id)
     if start_date:
         q = q.where(DailyHeadcount.date >= start_date)
@@ -46,9 +36,9 @@ async def list_headcounts(
 @router.get("/today", response_model=Optional[HeadcountOut])
 async def today_headcount(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_reader),
 ):
-    site_id = _get_site_id(current_user)
+    site_id = await resolve_site_id(db, current_user)
     today = datetime.date.today()
     result = await db.execute(
         select(DailyHeadcount).where(
@@ -65,7 +55,7 @@ async def create_headcount(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(_writer),
 ):
-    site_id = data.site_id or _get_site_id(current_user)
+    site_id = await resolve_site_id(db, current_user, data.site_id)
     # Upsert for today
     existing = await db.execute(
         select(DailyHeadcount).where(
@@ -96,7 +86,7 @@ async def update_headcount(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(_writer),
 ):
-    site_id = _get_site_id(current_user)
+    site_id = await resolve_site_id(db, current_user)
     entry = await db.get(DailyHeadcount, entry_id)
     if not entry or entry.site_id != site_id:
         raise HTTPException(404, "Entry not found")

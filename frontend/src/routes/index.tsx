@@ -1,6 +1,6 @@
 import React, { lazy } from 'react';
 import { UserRole } from '../types';
-import { LayoutDashboard, Package, CalendarClock, DollarSign, Flame, Users2, Bell, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Package, CalendarClock, DollarSign, Flame, Users2, Bell, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 const DashboardPage     = lazy(() => import('../pages/DashboardPage'));
@@ -11,6 +11,7 @@ const ConsumptionPage   = lazy(() => import('../pages/ConsumptionPage'));
 const HeadcountPage     = lazy(() => import('../pages/HeadcountPage'));
 const NotificationsPage = lazy(() => import('../pages/NotificationsPage'));
 const AdminPage         = lazy(() => import('../pages/AdminPage'));
+const ImportPage        = lazy(() => import('../pages/ImportPage'));
 
 export interface RouteConfig {
   path: string;
@@ -28,12 +29,13 @@ export interface RouteConfig {
 // UOP (nutrition_manager): view-only products/batches, no headcount editing, dashboard with urgent/expired items, cost per day table with average
 
 export const appRoutes: RouteConfig[] = [
-  { path: '/',             label: 'Дашборд',          icon: LayoutDashboard, element: DashboardPage,     allowedRoles: [],                                                    inNav: true },
-  { path: '/products',     label: 'Продукты',         icon: Package,         element: ProductsPage,      allowedRoles: ['admin', 'manager', 'storekeeper', 'nutrition_manager'], inNav: true },
-  { path: '/batches',      label: 'Партии / Сроки',   icon: CalendarClock,   element: BatchesPage,       allowedRoles: ['admin', 'manager', 'storekeeper', 'nutrition_manager'], inNav: true },
-  { path: '/costs',        label: 'Себестоимость',    icon: DollarSign,      element: CostsPage,         allowedRoles: ['admin', 'manager', 'nutrition_manager'],                  inNav: true },
-  { path: '/consumption',  label: 'Расход сырья',     icon: Flame,           element: ConsumptionPage,   allowedRoles: ['admin', 'manager', 'storekeeper', 'nutrition_manager'], inNav: true },
-  { path: '/headcount',    label: 'Питающиеся',       icon: Users2,          element: HeadcountPage,     allowedRoles: ['admin', 'manager'],                                       inNav: true },
-  { path: '/notifications',label: 'Уведомления',      icon: Bell,            element: NotificationsPage, allowedRoles: ['admin', 'manager'],                                       inNav: true },
-  { path: '/admin',        label: 'Администрирование', icon: ShieldCheck,    element: AdminPage,         allowedRoles: ['admin'],                                            inNav: true },
+  { path: '/',             label: 'Дашборд',          icon: LayoutDashboard, element: DashboardPage,     allowedRoles: ['superadmin', 'admin', 'nutrition_manager'], inNav: true },
+  { path: '/products',     label: 'Продукты',         icon: Package,         element: ProductsPage,      allowedRoles: ['superadmin', 'admin', 'storekeeper', 'nutrition_manager'], inNav: true },
+  { path: '/batches',      label: 'Партии / Сроки',   icon: CalendarClock,   element: BatchesPage,       allowedRoles: ['superadmin', 'admin', 'storekeeper', 'nutrition_manager'], inNav: true },
+  { path: '/costs',        label: 'Себестоимость',    icon: DollarSign,      element: CostsPage,         allowedRoles: ['superadmin', 'admin', 'manager', 'nutrition_manager'], inNav: true },
+  { path: '/consumption',  label: 'Расход сырья',     icon: Flame,           element: ConsumptionPage,   allowedRoles: ['superadmin', 'admin', 'storekeeper', 'nutrition_manager'], inNav: true },
+  { path: '/headcount',    label: 'Питающиеся',       icon: Users2,          element: HeadcountPage,     allowedRoles: ['superadmin', 'admin', 'manager', 'nutrition_manager'], inNav: true },
+  { path: '/notifications',label: 'Уведомления',      icon: Bell,            element: NotificationsPage, allowedRoles: ['superadmin', 'admin', 'storekeeper', 'manager', 'nutrition_manager'], inNav: true },
+  { path: '/import',       label: 'Импорт',           icon: FileSpreadsheet, element: ImportPage,        allowedRoles: ['superadmin', 'admin', 'storekeeper'], inNav: true },
+  { path: '/admin',        label: 'Администрирование', icon: ShieldCheck,    element: AdminPage,         allowedRoles: ['superadmin'], inNav: true },
 ];

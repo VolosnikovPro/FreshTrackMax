@@ -11,11 +11,17 @@ from app.models.site import Site
 from app.schemas import AdminSummary, UserCreate, UserOut, UserUpdate, SiteCreate, SiteUpdate, SiteOut
 from app.core.security import require_roles, get_current_user, hash_password
 from app.core.config import settings
-from typing import List
+from typing import List, Optional
+from app.core.site_access import resolve_site_id
+from fastapi.responses import StreamingResponse
+import csv
+import io
+import json
+from app.models.import_history import AuditLog
 
 router = APIRouter()
-_admin = require_roles(UserRole.admin)
-_admin_or_manager = require_roles(UserRole.admin, UserRole.manager)
+_admin = require_roles(UserRole.superadmin)
+_admin_or_manager = require_roles(UserRole.superadmin, UserRole.admin, UserRole.nutrition_manager)
 
 
 def _get_site_id(user: User) -> int:
@@ -25,10 +31,11 @@ def _get_site_id(user: User) -> int:
 
 @router.get("/summary", response_model=AdminSummary)
 async def admin_summary(
+    site_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(_admin_or_manager),
 ):
-    site_id = _get_site_id(current_user)
+    site_id = await resolve_site_id(db, current_user, site_id)
     today = datetime.date.today()
     urgent_threshold = today + datetime.timedelta(days=settings.EXPIRY_URGENT_THRESHOLD)
     planned_threshold = today + datetime.timedelta(days=settings.EXPIRY_PLANNED_THRESHOLD)
@@ -155,8 +162,7 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(_admin),
 ):
-    site_id = _get_site_id(current_user)
-    result = await db.execute(select(User).where(User.site_id == site_id).order_by(User.username))
+    result = await db.execute(select(User).order_by(User.username))
     return result.scalars().all()
 
 
@@ -188,9 +194,8 @@ async def update_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(_admin),
 ):
-    site_id = _get_site_id(current_user)
     user = await db.get(User, user_id)
-    if not user or user.site_id != site_id:
+    if not user:
         raise HTTPException(404, "User not found")
     for f, v in data.model_dump(exclude_unset=True).items():
         if f == "password" and v is not None:
@@ -204,9 +209,8 @@ async def update_user(
 
 @router.delete("/users/{user_id}", status_code=204)
 async def delete_user(user_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(_admin)):
-    site_id = _get_site_id(current_user)
     user = await db.get(User, user_id)
-    if not user or user.site_id != site_id:
+    if not user:
         raise HTTPException(404, "User not found")
     await db.delete(user)
     await db.commit()
@@ -215,3 +219,45 @@ async def delete_user(user_id: int, db: AsyncSession = Depends(get_db), current_
 @router.get("/me", response_model=UserOut)
 async def me(current_user=Depends(get_current_user)):
     return current_user
+
+
+@router.get("/audit/export")
+async def export_audit(
+    format: str = "csv",
+    site_id: Optional[int] = None,
+    start_date: Optional[datetime.date] = None,
+    end_date: Optional[datetime.date] = None,
+    action: Optional[str] = None,
+    subject_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.superadmin, UserRole.admin)),
+):
+    effective_site = await resolve_site_id(db, current_user, site_id)
+    query = select(AuditLog).where(AuditLog.site_id == effective_site)
+    if start_date:
+        query = query.where(AuditLog.created_at >= datetime.datetime.combine(start_date, datetime.time.min))
+    if end_date:
+        query = query.where(AuditLog.created_at < datetime.datetime.combine(end_date + datetime.timedelta(days=1), datetime.time.min))
+    if action:
+        query = query.where(AuditLog.action == action)
+    if subject_id:
+        query = query.where(AuditLog.subject_id == subject_id)
+    rows = (await db.execute(query.order_by(AuditLog.created_at))).scalars().all()
+    fields = ["id", "subject_id", "subject_role", "site_id", "action", "entity_type", "entity_id", "before_value", "after_value", "created_at"]
+
+    def export_value(value):
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, ensure_ascii=False, default=str)
+        return value
+
+    if format.lower() == "xlsx":
+        from openpyxl import Workbook
+        workbook = Workbook(); sheet = workbook.active; sheet.append(fields)
+        for row in rows:
+            sheet.append([export_value(getattr(row, field)) for field in fields])
+        output = io.BytesIO(); workbook.save(output); output.seek(0)
+        return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=audit.xlsx"})
+    output = io.StringIO(); writer = csv.writer(output); writer.writerow(fields)
+    for row in rows:
+        writer.writerow([export_value(getattr(row, field)) for field in fields])
+    return StreamingResponse(iter([output.getvalue().encode("utf-8-sig")]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=audit.csv"})

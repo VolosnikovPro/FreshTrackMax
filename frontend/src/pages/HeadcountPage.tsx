@@ -32,7 +32,7 @@ export default function HeadcountPage() {
     ]).catch(() => setError('Ошибка загрузки')).finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [currentSiteId]);
 
   const openForm = () => {
     setForm({ date: today, count: todayEntry ? String(todayEntry.count) : '', notes: todayEntry?.notes || '' });
@@ -42,7 +42,7 @@ export default function HeadcountPage() {
   const handleSave = async () => {
     if (!form.count || Number(form.count) < 1) { setError('Введите количество'); return; }
     try {
-      await headcountApi.create({ date: form.date, count: Number(form.count), notes: form.notes || null });
+      await headcountApi.create({ site_id: currentSiteId, date: form.date, count: Number(form.count), notes: form.notes || null });
       setShowForm(false); load();
     } catch (e: any) { setError(e.response?.data?.detail || 'Ошибка'); }
   };

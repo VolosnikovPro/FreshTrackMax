@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     GOOGLE_SERVICE_ACCOUNT_JSON: str = ""
 
     # Notification thresholds (days)
-    EXPIRY_URGENT_THRESHOLD: int = 16
-    EXPIRY_PLANNED_THRESHOLD: int = 46
+    EXPIRY_URGENT_THRESHOLD: int = 15
+    EXPIRY_PLANNED_THRESHOLD: int = 45
 
     # Notification schedule
     NOTIFICATION_TIME: str = "09:00"          # HH:MM

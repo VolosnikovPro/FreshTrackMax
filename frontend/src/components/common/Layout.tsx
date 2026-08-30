@@ -7,8 +7,9 @@ import { T } from './UI';
 import type { FC } from 'react';
 
 const ROLE_LABELS: Record<string, string> = {
+  superadmin: 'Главный администратор',
   admin: 'Администратор',
-  manager: 'Управляющий',
+  manager: 'УПП',
   storekeeper: 'Кладовщик',
   nutrition_manager: 'Управл. по питанию',
 };
@@ -17,7 +18,7 @@ export default function Layout() {
   const { user, logout, hasRole } = useAuth();
   const { sites, currentSite, currentSiteId, setCurrentSiteId } = useSite();
   const navigate = useNavigate();
-  const canSwitchSite = hasRole('admin', 'manager');
+  const canSwitchSite = hasRole('superadmin', 'admin');
 
   const navItems = appRoutes.filter(({ inNav, allowedRoles }) =>
     inNav && (allowedRoles.length === 0 || allowedRoles.some(r => hasRole(r)))

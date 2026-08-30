@@ -95,12 +95,12 @@ def test_role_isolation_storekeeper_blocked_from_admin(seeded_client, auth_heade
     assert resp.status_code == 403
 
 
-def test_role_isolation_manager_can_read_admin_summary(seeded_client, auth_header):
-    """A manager CAN access admin_or_manager endpoints (e.g. /admin/summary)."""
+def test_role_isolation_manager_cannot_read_admin_summary(seeded_client, auth_header):
+    """UPP does not access the administrative dashboard endpoint."""
     _create_user_via_api(seeded_client, auth_header, "mgr", "manager")
     h = {"Authorization": f"Bearer {_token_for(seeded_client, 'mgr')}"}
     resp = seeded_client.get("/api/admin/summary", headers=h)
-    assert resp.status_code in (200, 201)
+    assert resp.status_code == 403
 
 
 def test_admin_can_create_user(seeded_client, auth_header):
@@ -181,8 +181,8 @@ def test_admin_can_switch_site_via_query(seeded_client, auth_header, session_fac
     assert "ТоварA" in names
 
 
-def test_storekeeper_site_query_ignored(seeded_client, auth_header, session_factory):
-    """A storekeeper's site_id query is ignored; they only see their own site."""
+def test_storekeeper_site_query_is_rejected(seeded_client, auth_header, session_factory):
+    """A storekeeper cannot even request another site's context."""
     from sqlalchemy import select
     from app.models.site import Site
     from app.models.product import Product
@@ -206,10 +206,123 @@ def test_storekeeper_site_query_ignored(seeded_client, auth_header, session_fact
     h = {"Authorization": f"Bearer {_token_for(seeded_client, 'klad2')}"}
     # Even if they try site_id=site2, they must only see their own site (ТоварX)
     resp = seeded_client.get(f"/api/products/?site_id={site2_id}", headers=h)
-    assert resp.status_code in (200, 201), resp.text
-    names = {p["name"] for p in resp.json()}
-    assert "ТоварX" in names
-    assert "ТоварY" not in names
+    assert resp.status_code == 403, resp.text
+
+
+def test_lower_role_is_forbidden_from_requesting_another_site(seeded_client, auth_header, session_factory):
+    """A caller below administrator must receive 403, never a silently scoped result."""
+    async def _seed():
+        async with session_factory() as s:
+            site2 = Site(name="Чужой объект", code="OTHER", is_active=True)
+            s.add(site2)
+            await s.commit()
+            return site2.id
+
+    other_site_id = asyncio.get_event_loop().run_until_complete(_seed())
+    _create_user_via_api(seeded_client, auth_header, "klad403", "storekeeper")
+    header = {"Authorization": f"Bearer {_token_for(seeded_client, 'klad403')}"}
+
+    response = seeded_client.get(f"/api/products/?site_id={other_site_id}", headers=header)
+
+    assert response.status_code == 403, response.text
+
+
+def test_manager_cannot_switch_site(seeded_client, auth_header, session_factory):
+    """UPP (manager) is bound to its own site despite a supplied site_id."""
+    async def _seed():
+        async with session_factory() as s:
+            site2 = Site(name="Другой объект УПП", code="MGR2", is_active=True)
+            s.add(site2)
+            await s.commit()
+            return site2.id
+
+    other_site_id = asyncio.get_event_loop().run_until_complete(_seed())
+    _create_user_via_api(seeded_client, auth_header, "mgr403", "manager")
+    header = {"Authorization": f"Bearer {_token_for(seeded_client, 'mgr403')}"}
+
+    response = seeded_client.get(f"/api/products/?site_id={other_site_id}", headers=header)
+
+    assert response.status_code == 403, response.text
+
+
+def test_admin_cannot_select_inactive_site(seeded_client, auth_header, session_factory):
+    """Administrative switching still rejects an inactive object."""
+    async def _seed():
+        async with session_factory() as s:
+            site = Site(name="Отключенный объект", code="OFF", is_active=False)
+            s.add(site)
+            await s.commit()
+            return site.id
+
+    inactive_site_id = asyncio.get_event_loop().run_until_complete(_seed())
+    response = seeded_client.get(f"/api/products/?site_id={inactive_site_id}", headers=auth_header)
+
+    assert response.status_code == 409, response.text
+
+
+def test_existing_product_cannot_be_changed_or_deleted(seeded_client, auth_header):
+    """Product master data is immutable after creation."""
+    created = seeded_client.post(
+        "/api/products/", headers=auth_header,
+        json={"name": "Неизменяемый", "unit": "кг"},
+    )
+    assert created.status_code == 201, created.text
+    product_id = created.json()["id"]
+
+    updated = seeded_client.put(
+        f"/api/products/{product_id}", headers=auth_header, json={"name": "Новое имя"},
+    )
+    deleted = seeded_client.delete(f"/api/products/{product_id}", headers=auth_header)
+
+    assert updated.status_code == 409, updated.text
+    assert deleted.status_code == 409, deleted.text
+    current = seeded_client.get(f"/api/products/{product_id}", headers=auth_header)
+    assert current.json()["name"] == "Неизменяемый"
+
+
+def test_expiring_endpoints_honor_admin_selected_site(seeded_client, auth_header, session_factory):
+    """Dashboard expiry lists must use the site selected by an admin."""
+    from app.models.batch import Batch
+    from app.models.product import Product
+    from app.models.site import Site
+    from datetime import date, timedelta
+
+    async def _seed():
+        async with session_factory() as session:
+            source_product = (await session.execute(select(Product).where(Product.name == "Молоко"))).scalar_one_or_none()
+            if source_product is None:
+                source_product = Product(site_id=1, name="Молоко", unit="кг", is_active=True)
+                session.add(source_product)
+                await session.flush()
+            other = Site(name="Объект сроков", code="EXP", is_active=True)
+            session.add(other)
+            await session.flush()
+            other_product = Product(site_id=other.id, name="Только другой объект", unit="кг", is_active=True)
+            session.add(other_product)
+            await session.flush()
+            session.add(Batch(site_id=other.id, product_id=other_product.id, quantity=1, unit="кг", expiry_date=date.today() + timedelta(days=2)))
+            await session.commit()
+            return other.id
+
+    import asyncio
+    selected_site_id = asyncio.get_event_loop().run_until_complete(_seed())
+
+    response = seeded_client.get(f"/api/batches/expiring/urgent?site_id={selected_site_id}", headers=auth_header)
+
+    assert response.status_code == 200, response.text
+    assert [row["product_name"] for row in response.json()] == ["Только другой объект"]
+
+
+def test_storekeeper_cannot_create_manual_consumption(seeded_client, auth_header, make_future_date):
+    """Storekeepers write off stock only through an imported consumption file."""
+    _create_user_via_api(seeded_client, auth_header, "klad-manual", "storekeeper")
+    header = {"Authorization": f"Bearer {_token_for(seeded_client, 'klad-manual')}"}
+    product = seeded_client.post("/api/products/", headers=header, json={"name": "Расход только файлом", "unit": "кг"}).json()
+    seeded_client.post("/api/batches/", headers=header, json={"product_id": product["id"], "quantity": 3, "unit": "кг", "expiry_date": make_future_date(10)})
+
+    response = seeded_client.post("/api/consumption/", headers=header, json={"product_id": product["id"], "quantity_used": 1, "unit": "кг", "date": make_future_date(0)})
+
+    assert response.status_code == 403, response.text
 
 
 async def _make_product(session, site_id, name):

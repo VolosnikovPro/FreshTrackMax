@@ -7,21 +7,11 @@ from app.models.product import Product
 from app.schemas import ProductCreate, ProductUpdate, ProductOut
 from app.core.security import get_current_user, require_roles
 from app.models.user import UserRole, User
+from app.core.site_access import resolve_site_id
 
 router = APIRouter()
-_admin_or_manager = require_roles(UserRole.admin, UserRole.manager, UserRole.nutrition_manager)
-
-
-def _get_site_id(user: User, request_site_id: Optional[int] = None) -> int:
-    """Resolve the effective site_id.
-
-    Admin/manager may pass `request_site_id` to view another site's data
-    (e.g. via the frontend site switcher). Other roles are always scoped to
-    their own `user.site_id`.
-    """
-    if request_site_id is not None and user.role in (UserRole.admin, UserRole.manager):
-        return request_site_id
-    return user.site_id or 1
+_product_creator = require_roles(UserRole.superadmin, UserRole.admin, UserRole.storekeeper)
+_product_reader = require_roles(UserRole.superadmin, UserRole.admin, UserRole.storekeeper, UserRole.nutrition_manager)
 
 
 @router.get("/", response_model=List[ProductOut])
@@ -29,9 +19,9 @@ async def list_products(
     active_only: bool = True,
     site_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_product_reader),
 ):
-    site_id = _get_site_id(current_user, site_id)
+    site_id = await resolve_site_id(db, current_user, site_id)
     q = select(Product).where(Product.site_id == site_id)
     if active_only:
         q = q.where(Product.is_active == True)
@@ -43,9 +33,9 @@ async def list_products(
 async def get_product(
     product_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_product_reader),
 ):
-    site_id = _get_site_id(current_user)
+    site_id = await resolve_site_id(db, current_user)
     product = await db.get(Product, product_id)
     if not product or product.site_id != site_id:
         raise HTTPException(404, "Product not found")
@@ -56,9 +46,9 @@ async def get_product(
 async def create_product(
     data: ProductCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(_admin_or_manager),
+    current_user: User = Depends(_product_creator),
 ):
-    site_id = data.site_id or _get_site_id(current_user)
+    site_id = await resolve_site_id(db, current_user, data.site_id)
     product_data = data.model_dump()
     product_data["site_id"] = site_id
     product = Product(**product_data)
@@ -73,28 +63,17 @@ async def update_product(
     product_id: int,
     data: ProductUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(_admin_or_manager),
+    current_user: User = Depends(_product_creator),
 ):
-    site_id = _get_site_id(current_user)
-    product = await db.get(Product, product_id)
-    if not product or product.site_id != site_id:
-        raise HTTPException(404, "Product not found")
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(product, field, value)
-    await db.commit()
-    await db.refresh(product)
-    return product
+    # Product records are source documents. Corrections must be represented by
+    # a new record/import, never by changing historical master data in place.
+    raise HTTPException(409, detail={"code": "PRODUCT_IMMUTABLE", "message": "Существующий продукт нельзя редактировать"})
 
 
 @router.delete("/{product_id}", status_code=204)
 async def delete_product(
     product_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_roles(UserRole.superadmin, UserRole.admin)),
 ):
-    site_id = _get_site_id(current_user)
-    product = await db.get(Product, product_id)
-    if not product or product.site_id != site_id:
-        raise HTTPException(404, "Product not found")
-    product.is_active = False   # soft delete
-    await db.commit()
+    raise HTTPException(409, detail={"code": "PRODUCT_IMMUTABLE", "message": "Существующий продукт нельзя удалять"})

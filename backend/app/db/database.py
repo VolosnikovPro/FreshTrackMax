@@ -12,7 +12,7 @@ class Base(DeclarativeBase):
 
 async def create_tables():
     """Create all tables on startup."""
-    from app.models import user, site, product, batch, consumption, notification  # noqa
+    from app.models import user, site, product, batch, consumption, notification, import_history  # noqa
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

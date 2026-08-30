@@ -13,10 +13,9 @@ export default function ProductsPage() {
   const { hasRole, user } = useAuth();
   const { currentSiteId } = useSite();
   const role = user?.role;
-  const canWrite = hasRole('admin', 'storekeeper');
-  const canView = hasRole('admin', 'manager', 'storekeeper', 'nutrition_manager');
-  const canEdit = hasRole('admin'); // Only admin can edit existing products
-  const canDelete = hasRole('admin'); // Only admin can delete
+  const canWrite = hasRole('superadmin', 'admin', 'storekeeper');
+  const canView = hasRole('superadmin', 'admin', 'storekeeper', 'nutrition_manager');
+  const canEdit = false;
 
   const [products, setProducts] = useState<Product[]>([]);
   const [filter, setFilter] = useState<Filter>('active');
@@ -35,7 +34,7 @@ export default function ProductsPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => { load(); }, [filter, currentSiteId]);
 
   const visible = products.filter(p =>
     search === '' || p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -57,7 +56,7 @@ export default function ProductsPage() {
   const handleSave = async () => {
     if (!form.name) { setError('Введите название'); return; }
     try {
-      const payload = { ...form, sku: form.sku || null, category: form.category || null, description: form.description || null };
+      const payload = { ...form, site_id: currentSiteId, sku: form.sku || null, category: form.category || null, description: form.description || null };
       if (editing) await productsApi.update(editing.id, payload);
       else await productsApi.create(payload);
       setShowForm(false); load();

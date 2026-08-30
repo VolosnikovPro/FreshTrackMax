@@ -1,37 +1,41 @@
 import React, { useEffect, useState } from 'react';
-import { adminApi, batchesApi } from '../api';
+import { adminApi, batchesApi, financialApi } from '../api';
 import { AdminSummary, Batch } from '../types';
 import { Card, StatCard, Loading, ExpiryBadge, T } from '../components/common/UI';
 import { Package, CalendarClock, AlertTriangle, Users2, Flame, DollarSign, TrendingUp, AlertCircle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
+import { useSite } from '../hooks/useSite';
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { currentSiteId } = useSite();
   const role = user?.role;
   const isNutritionManager = role === 'nutrition_manager';
-  const isAdmin = role === 'admin';
+  const isAdmin = role === 'admin' || role === 'superadmin';
   const isManager = role === 'manager';
 
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [urgentBatches, setUrgentBatches] = useState<Batch[]>([]);
   const [plannedBatches, setPlannedBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [financialSummary, setFinancialSummary] = useState<{rows: any[]; average: number | null}>({ rows: [], average: null });
 
   useEffect(() => {
     if (isNutritionManager) {
       Promise.all([
-        batchesApi.expiringUrgent().then(r => setUrgentBatches(r.data)),
-        batchesApi.expiringPlanned().then(r => setPlannedBatches(r.data)),
+        batchesApi.expiringUrgent(currentSiteId).then(r => setUrgentBatches(r.data)),
+        batchesApi.expiringPlanned(currentSiteId).then(r => setPlannedBatches(r.data)),
+        financialApi.list({ site_id: currentSiteId, month: new Date().toISOString().slice(0, 7) }).then(r => setFinancialSummary(r.data)),
       ]).finally(() => setLoading(false));
     } else {
       Promise.all([
-        adminApi.summary().then(r => setSummary(r.data)),
-        batchesApi.expiringUrgent().then(r => setUrgentBatches(r.data)),
-        batchesApi.expiringPlanned().then(r => setPlannedBatches(r.data)),
+        adminApi.summary(currentSiteId).then(r => setSummary(r.data)),
+        batchesApi.expiringUrgent(currentSiteId).then(r => setUrgentBatches(r.data)),
+        batchesApi.expiringPlanned(currentSiteId).then(r => setPlannedBatches(r.data)),
       ]).finally(() => setLoading(false));
     }
-  }, [isNutritionManager]);
+  }, [isNutritionManager, currentSiteId]);
 
   if (loading) return <Loading />;
 
@@ -98,19 +102,19 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Cost per day - placeholder for now, will show when costs API is available */}
+        {/* Contractual cost per day */}
         <div>
           <h2 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: T.text }}>
             💰 Себестоимость дня
           </h2>
           <Card style={{ padding: '16px' }}>
             <div style={{ fontSize: 13, color: T.sub, textAlign: 'center' }}>
-              Данные по себестоимости будут доступны после внесения цен в раздел «Себестоимость»
+              Сумма накладной без НДС / количество питающихся
             </div>
             <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-around', fontSize: 12, color: T.text }}>
               <div>
                 <div style={{ color: T.sub }}>Средняя в день</div>
-                <div style={{ fontWeight: 700 }}>—</div>
+                <div style={{ fontWeight: 700 }}>{financialSummary.average ?? '—'}</div>
               </div>
               <div>
                 <div style={{ color: T.sub }}>За вчера</div>

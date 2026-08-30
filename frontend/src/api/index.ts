@@ -43,8 +43,8 @@ export const productsApi = {
 export const batchesApi = {
   list: (params?: object) => api.get('/batches/', { params }),
   get: (id: number) => api.get(`/batches/${id}`),
-  expiringUrgent: () => api.get('/batches/expiring/urgent'),
-  expiringPlanned: () => api.get('/batches/expiring/planned'),
+  expiringUrgent: (siteId?: number | null) => api.get('/batches/expiring/urgent', { params: siteId ? { site_id: siteId } : {} }),
+  expiringPlanned: (siteId?: number | null) => api.get('/batches/expiring/planned', { params: siteId ? { site_id: siteId } : {} }),
   create: (data: object) => api.post('/batches/', data),
   update: (id: number, data: object) => api.put(`/batches/${id}`, data),
   delete: (id: number) => api.delete(`/batches/${id}`),
@@ -55,6 +55,11 @@ export const costsApi = {
   create: (data: object) => api.post('/costs/', data),
   update: (id: number, data: object) => api.put(`/costs/${id}`, data),
   delete: (id: number) => api.delete(`/costs/${id}`),
+};
+
+export const financialApi = {
+  upsert: (data: object) => api.post('/costs/financial', data),
+  list: (params?: object) => api.get('/costs/financial', { params }),
 };
 
 export const consumptionApi = {
@@ -74,7 +79,7 @@ export const headcountApi = {
 };
 
 export const adminApi = {
-  summary: () => api.get('/admin/summary'),
+  summary: (siteId?: number | null) => api.get('/admin/summary', { params: siteId ? { site_id: siteId } : {} }),
   listUsers: () => api.get('/admin/users'),
   createUser: (data: object) => api.post('/admin/users', data),
   updateUser: (id: number, data: object) => api.put(`/admin/users/${id}`, data),
@@ -82,8 +87,8 @@ export const adminApi = {
 };
 
 export const notificationsApi = {
-  triggerUrgent: () => api.post('/notifications/trigger/urgent'),
-  triggerPlanned: () => api.post('/notifications/trigger/planned'),
+  triggerUrgent: (siteId?: number | null) => api.post('/notifications/trigger/urgent', null, { params: siteId ? { site_id: siteId } : {} }),
+  triggerPlanned: (siteId?: number | null) => api.post('/notifications/trigger/planned', null, { params: siteId ? { site_id: siteId } : {} }),
   config: () => api.get('/notifications/config'),
   logs: (params?: object) => api.get('/notifications/logs', { params }),
 };
@@ -97,14 +102,16 @@ export const sitesApi = {
 };
 
 export const sheetsApi = {
-  importFile: (file: File, importType: string) => {
+  importFile: (file: File, importType: string, siteId?: number | null) => {
     const form = new FormData();
     form.append('file', file);
-    return api.post(`/sheets/import/file?import_type=${importType}`, form, {
+    return api.post(`/sheets/import/file?import_type=${importType}${siteId ? `&site_id=${siteId}` : ''}`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  importSheets: (body: { url_or_id: string; import_type: string; sheet_name?: string }) =>
+  history: (siteId?: number | null) => api.get('/sheets/import/history', { params: siteId ? { site_id: siteId } : {} }),
+  cancel: (id: number, reason?: string) => api.post(`/sheets/import/${id}/cancel`, null, { params: reason ? { reason } : {} }),
+  importSheets: (body: { url_or_id: string; import_type: string; sheet_name?: string; site_id?: number | null }) =>
     api.post('/sheets/import/sheets', body),
   types: () => api.get('/sheets/import/types'),
 };

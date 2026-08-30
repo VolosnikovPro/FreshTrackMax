@@ -38,6 +38,21 @@ class StockCheckResult:
     batches: List[dict]  # List of {batch_id, quantity, expiry_date}
 
 
+def fefo_batches_statement(site_id: int, product_id: int):
+    """Build the locked FEFO query used by stock-changing operations."""
+    return (
+        select(Batch)
+        .where(
+            Batch.site_id == site_id,
+            Batch.product_id == product_id,
+            Batch.status == "active",
+            Batch.quantity > 0,
+        )
+        .order_by(Batch.expiry_date.asc(), Batch.id.asc())
+        .with_for_update()
+    )
+
+
 async def check_stock_availability(
     db: AsyncSession,
     site_id: int,
@@ -50,13 +65,7 @@ async def check_stock_availability(
     Returns StockCheckResult with available quantity and list of batches.
     """
     # Get all active batches for this product at this site, ordered by expiry date (FEFO)
-    result = await db.execute(
-        select(Batch).where(
-            Batch.site_id == site_id,
-            Batch.product_id == product_id,
-            Batch.quantity > 0
-        ).order_by(Batch.expiry_date.asc())
-    )
+    result = await db.execute(fefo_batches_statement(site_id, product_id))
     batches = result.scalars().all()
 
     total_available = sum(b.quantity for b in batches)
@@ -153,8 +162,7 @@ async def write_off_consumption_fefo(
         # If batch is now zero, archive it (don't delete)
         if batch.quantity <= 0:
             batch.quantity = 0
-            # Could add an is_archived flag here in future
-            # For now, zero quantity means it won't appear in active queries
+            batch.status = "archived"
 
     if remaining > 0:
         # This shouldn't happen if we checked total_available first
@@ -201,6 +209,7 @@ async def process_daily_consumption_import(
     unit: str,
     entered_by: Optional[int] = None,
     notes: Optional[str] = None,
+    import_run_id: Optional[int] = None,
 ) -> WriteOffResult:
     """
     Process a daily consumption entry with FEFO write-off.
@@ -216,6 +225,7 @@ async def process_daily_consumption_import(
         unit=unit,
         entered_by=entered_by,
         notes=notes,
+        import_run_id=import_run_id,
     )
     db.add(consumption)
     await db.flush()  # Get the ID

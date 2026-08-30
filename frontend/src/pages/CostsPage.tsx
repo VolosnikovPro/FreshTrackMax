@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { costsApi, productsApi } from '../api';
+import { costsApi, productsApi, financialApi } from '../api';
 import { RawMaterialCost, Product } from '../types';
 import { Card, FAB, Modal, Input, Select, Loading, ErrorMsg, T } from '../components/common/UI';
 import { Pencil } from 'lucide-react';
@@ -11,11 +11,10 @@ export default function CostsPage() {
   const { hasRole, user } = useAuth();
   const { currentSiteId } = useSite();
   const role = user?.role;
-  const isAdmin = role === 'admin';
   const isManager = role === 'manager';
   const isNutritionManager = role === 'nutrition_manager';
-  const canWrite = isAdmin || isManager || isNutritionManager;
-  const canEdit = isAdmin || isManager;  // Only admin/manager can edit costs
+  const canWrite = false;
+  const canEdit = false;
 
   const [costs, setCosts] = useState<RawMaterialCost[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -25,13 +24,24 @@ export default function CostsPage() {
   const [editing, setEditing] = useState<RawMaterialCost | null>(null);
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({ product_id: '', cost_per_unit: '', currency: 'RUB', effective_date: today, notes: '' });
+  const [financial, setFinancial] = useState({ date: today, invoice_amount_net: '', headcount: '' });
+  const [financialRows, setFinancialRows] = useState<any[]>([]);
+  const [financialAverage, setFinancialAverage] = useState<number | null>(null);
 
-  const load = () => Promise.all([
-    costsApi.list(undefined, currentSiteId).then(r => setCosts(r.data)),
-    productsApi.list(true, currentSiteId).then(r => setProducts(r.data)),
-  ]).catch(() => setError('Ошибка загрузки')).finally(() => setLoading(false));
+  const load = () => {
+    return financialApi.list({ site_id: currentSiteId, month: today.slice(0, 7) })
+      .then(r => { setFinancialRows(r.data.rows); setFinancialAverage(r.data.average); })
+      .catch(() => setError('Ошибка загрузки'))
+      .finally(() => setLoading(false));
+  };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [currentSiteId]);
+
+  const saveFinancial = async () => {
+    if (!financial.invoice_amount_net || financial.headcount === '') { setError('Заполните дату, сумму и количество питающихся'); return; }
+    try { await financialApi.upsert({ ...financial, site_id: currentSiteId, invoice_amount_net: financial.invoice_amount_net, headcount: Number(financial.headcount) }); await load(); }
+    catch (e: any) { setError(e.response?.data?.detail || 'Ошибка сохранения'); }
+  };
 
   const productOptions = [{ value: '', label: '— Выберите продукт —' }, ...products.map(p => ({ value: String(p.id), label: p.name }))];
 
@@ -46,7 +56,7 @@ export default function CostsPage() {
   const handleSave = async () => {
     if (!form.product_id || !form.cost_per_unit) { setError('Заполните обязательные поля'); return; }
     try {
-      const payload = { product_id: Number(form.product_id), cost_per_unit: Number(form.cost_per_unit), currency: form.currency, effective_date: form.effective_date, notes: form.notes || null };
+      const payload = { site_id: currentSiteId, product_id: Number(form.product_id), cost_per_unit: Number(form.cost_per_unit), currency: form.currency, effective_date: form.effective_date, notes: form.notes || null };
       if (editing) await costsApi.update(editing.id, payload);
       else await costsApi.create(payload);
       setShowForm(false); load();
@@ -71,6 +81,21 @@ export default function CostsPage() {
   });
 
   if (loading) return <Loading />;
+
+  const financialTable = (
+    <Card style={{ marginTop: 16, padding: 16 }}>
+      <b>Среднее за месяц: {financialAverage ?? '—'}</b>
+      {financialRows.length === 0 ? <div style={{ marginTop: 12, color: T.sub }}>Нет финансовых записей за месяц</div> : financialRows.map(row => (
+        <div key={row.date} style={{ padding: '8px 0', borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between' }}>
+          <span>{row.date}</span><strong>{row.daily_cost ?? '—'}</strong>
+        </div>
+      ))}
+    </Card>
+  );
+
+  if (isManager) return <div><h1 style={{ margin: '0 0 16px', fontSize: 20, fontWeight: 800, color: T.text }}>Договорная себестоимость</h1>{error && <ErrorMsg message={error} />}<Card style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}><Input label="Дата" type="date" value={financial.date} onChange={e => setFinancial({ ...financial, date: e.target.value })} /><Input label="Сумма накладной без НДС" type="number" value={financial.invoice_amount_net} onChange={e => setFinancial({ ...financial, invoice_amount_net: e.target.value })} /><Input label="Количество питающихся" type="number" min="0" value={financial.headcount} onChange={e => setFinancial({ ...financial, headcount: e.target.value })} /><button onClick={saveFinancial} style={{ background: T.blue, color: '#fff', border: 0, borderRadius: 8, padding: 12, fontWeight: 700 }}>Сохранить</button></Card>{financialTable}</div>;
+
+  return <div><h1 style={{ margin: '0 0 16px', fontSize: 20, fontWeight: 800, color: T.text }}>Договорная себестоимость</h1>{error && <ErrorMsg message={error} />}{financialTable}</div>;
 
   // For nutrition_manager (UOP): view-only table with dates + average row
   if (isNutritionManager) {

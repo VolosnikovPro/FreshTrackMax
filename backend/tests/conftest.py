@@ -12,6 +12,7 @@ import uuid
 # Provide required settings BEFORE importing the app (Settings() reads env at import time).
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("MAX_BOT_TOKEN", "test-max-token")
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
 
 from datetime import date, timedelta  # noqa: E402
 
@@ -75,7 +76,7 @@ async def seeded(session_factory):
         admin = User(
             username="admin",
             display_name="Admin",
-            role=UserRole.admin,
+            role=UserRole.superadmin,
             max_user_id=-1,
             site_id=site.id,
             hashed_password=hash_password("admin123"),

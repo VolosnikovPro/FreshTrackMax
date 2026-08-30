@@ -48,3 +48,10 @@ def test_logs_empty_when_no_batches(seeded_client, auth_header):
     # No log row should be created when nothing to send
     logs = seeded_client.get("/api/notifications/logs", headers=auth_header).json()
     assert logs == []
+
+
+def test_application_registers_notification_scheduler(seeded_client):
+    """The scheduler is started with the API application, not left as a dead module."""
+    from main import app
+
+    assert app.state.notification_scheduler_task is not None

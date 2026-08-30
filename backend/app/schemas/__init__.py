@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
+from decimal import Decimal
 from datetime import date, datetime
 from app.models.user import UserRole
 
@@ -118,6 +119,7 @@ class BatchCreate(BaseModel):
     site_id: Optional[int] = None
     product_id: int
     batch_number: Optional[str] = None
+    upd_number: Optional[str] = None
     quantity: float = Field(..., gt=0)
     unit: str = "kg"
     expiry_date: date
@@ -139,7 +141,9 @@ class BatchOut(BaseModel):
     product_id: int
     product_name: str = ""
     batch_number: Optional[str]
+    upd_number: Optional[str]
     quantity: float
+    status: str
     unit: str
     expiry_date: date
     received_date: Optional[date]
@@ -180,6 +184,20 @@ class CostOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class FinancialEntryCreate(BaseModel):
+    site_id: Optional[int] = None
+    date: date
+    invoice_amount_net: Decimal = Field(..., gt=0)
+    headcount: int = Field(..., ge=0)
+
+
+class FinancialEntryOut(BaseModel):
+    date: date
+    invoice_amount_net: Decimal
+    headcount: int
+    daily_cost: Optional[Decimal]
 
 
 # ─── Consumption ──────────────────────────────────────────────────────────────
@@ -272,6 +290,9 @@ class NotificationLogOut(BaseModel):
     sent_count: int
     message_text: Optional[str]
     triggered_by: Optional[int]
+    period_key: Optional[str] = None
+    status: str = "sent"
+    reason: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

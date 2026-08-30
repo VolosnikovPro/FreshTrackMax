@@ -5,6 +5,7 @@ import enum
 
 
 class UserRole(str, enum.Enum):
+    superadmin = "superadmin"
     admin = "admin"
     manager = "manager"           # Управляющий
     storekeeper = "storekeeper"   # Кладовщик
@@ -28,3 +29,4 @@ class User(Base):
     costs = relationship("RawMaterialCost", back_populates="updated_by_user", lazy="select")
     consumptions = relationship("DailyConsumption", back_populates="entered_by_user", lazy="select")
     headcounts = relationship("DailyHeadcount", back_populates="entered_by_user", lazy="select")
+    financial_expenses = relationship("DailyFinancialExpense", foreign_keys="DailyFinancialExpense.entered_by", lazy="select")

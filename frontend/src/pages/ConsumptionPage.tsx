@@ -18,9 +18,9 @@ export default function ConsumptionPage() {
   const isAdmin = role === 'admin';
   const isNutritionManager = role === 'nutrition_manager';
 
-  const canWrite = isAdmin || isStorekeeper || isNutritionManager;  // Admin, Storekeeper, Nutrition Manager can add
-  const canWriteDetailed = isAdmin || isStorekeeper || isNutritionManager;  // Detailed entries
-  const canDelete = isAdmin || isManager;  // Admin and Manager can delete
+  const canWrite = false;
+  const canWriteDetailed = false;
+  const canDelete = false;
 
   const [entries, setEntries] = useState<DailyConsumption[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -44,7 +44,7 @@ export default function ConsumptionPage() {
     ]).catch(() => setError('Ошибка загрузки')).finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [currentSiteId]);
 
   const openCreate = () => {
     setEditing(null);
@@ -75,7 +75,7 @@ export default function ConsumptionPage() {
         notes: form.notes || null,
       };
       if (editing) await consumptionApi.update(editing.id, payload);
-      else await consumptionApi.create(payload);
+      else await consumptionApi.create({ ...payload, site_id: currentSiteId });
       setShowForm(false); load();
     } catch (e: any) { setError(e.response?.data?.detail || 'Ошибка сохранения'); }
   };
@@ -89,7 +89,7 @@ export default function ConsumptionPage() {
     } catch { setError('Ошибка удаления'); }
   };
 
-  if (!hasRole('admin', 'manager', 'storekeeper', 'nutrition_manager')) {
+  if (!hasRole('superadmin', 'admin', 'manager', 'storekeeper', 'nutrition_manager')) {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: T.sub }}>
         <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>

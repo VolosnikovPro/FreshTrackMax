@@ -1,18 +1,33 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.config import LOGGING_CONFIG
+from contextlib import asynccontextmanager, suppress
+import asyncio
 from app.api.routes import (
     auth, products, batches, costs, consumption,
     headcount, notifications, admin, sheets, sites
 )
 from app.core.config import settings
-from app.db.database import create_tables
+from app.services.notification_scheduler import notification_scheduler_loop
 import uvicorn
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    application.state.notification_scheduler_task = asyncio.create_task(notification_scheduler_loop())
+    try:
+        yield
+    finally:
+        application.state.notification_scheduler_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await application.state.notification_scheduler_task
+
 
 app = FastAPI(
     title="FreshTrack MVP API",
     description="Expiry date control and raw material consumption tracking system",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -22,11 +37,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-async def on_startup():
-    await create_tables()
 
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])

@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'manager' | 'storekeeper' | 'nutrition_manager';
+export type UserRole = 'superadmin' | 'admin' | 'manager' | 'storekeeper' | 'nutrition_manager';
 
 export interface User {
   id: number;
@@ -41,7 +41,9 @@ export interface Batch {
   product_id: number;
   product_name: string;
   batch_number: string | null;
+  upd_number: string | null;
   quantity: number;
+  status: 'active' | 'archived';
   unit: string;
   expiry_date: string;       // ISO date string
   received_date: string | null;

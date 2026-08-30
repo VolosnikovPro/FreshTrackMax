@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { notificationsApi } from '../api';
 import { Card, Loading, T } from '../components/common/UI';
+import { useSite } from '../hooks/useSite';
 
 interface Config { urgent_threshold_days: number; planned_threshold_days: number; notification_time: string; base_day: string; max_per_week: number; }
 interface Result { sent: number; recipients: string[]; products_included: number; }
 
 export default function NotificationsPage() {
+  const { currentSiteId } = useSite();
   const [config, setConfig] = useState<Config | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [loading, setLoading] = useState<'urgent' | 'planned' | null>(null);
@@ -16,7 +18,7 @@ export default function NotificationsPage() {
   const trigger = async (type: 'urgent' | 'planned') => {
     setLoading(type); setResult(null); setLastType(type);
     try {
-      const res = type === 'urgent' ? await notificationsApi.triggerUrgent() : await notificationsApi.triggerPlanned();
+      const res = type === 'urgent' ? await notificationsApi.triggerUrgent(currentSiteId) : await notificationsApi.triggerPlanned(currentSiteId);
       setResult(res.data);
     } catch (e: any) { alert(e.response?.data?.detail || 'Ошибка отправки'); }
     finally { setLoading(null); }
@@ -54,7 +56,7 @@ export default function NotificationsPage() {
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 15, color: '#DC2626', marginBottom: 4 }}>⚠️ Срочные уведомления</div>
               <div style={{ fontSize: 13, color: T.sub }}>
-                Продукты с истечением срока менее {config?.urgent_threshold_days ?? 16} дней.
+                Просроченные продукты и партии со сроком ≤ {config?.urgent_threshold_days ?? 15} дней.
                 Отправляется управляющему, кладовщику и руководителю.
               </div>
             </div>
@@ -70,7 +72,7 @@ export default function NotificationsPage() {
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: 15, color: '#D97706', marginBottom: 4 }}>📋 Плановые уведомления</div>
             <div style={{ fontSize: 13, color: T.sub }}>
-              Продукты с истечением срока менее {config?.planned_threshold_days ?? 46} дней.
+              Продукты и партии со сроком от 16 до {config?.planned_threshold_days ?? 45} дней.
               До {config?.max_per_week ?? 6} раз в неделю, базовый день — воскресенье.
             </div>
           </div>
@@ -94,14 +96,6 @@ export default function NotificationsPage() {
           )}
         </Card>
       )}
-
-      {/* MVP limitations note */}
-      <Card style={{ padding: '14px 16px', background: T.bg }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 8 }}>Ограничения MVP</div>
-        {['Журнал доставки не реализован', 'Email и Telegram не входят в MVP', 'Автоматическое расписание требует настройки планировщика'].map(t => (
-          <div key={t} style={{ fontSize: 12, color: T.muted, padding: '4px 0', borderTop: `1px solid ${T.border}` }}>· {t}</div>
-        ))}
-      </Card>
     </div>
   );
 }
