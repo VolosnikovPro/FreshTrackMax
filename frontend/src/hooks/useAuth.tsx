@@ -46,6 +46,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    if (!token) return;
+
+    let isCurrent = true;
+    authApi.me().then(({ data: freshUser }) => {
+      if (!isCurrent) return;
+      localStorage.setItem('ft_user', JSON.stringify(freshUser));
+      setUser(freshUser);
+    }).catch(() => {
+      // The API interceptor clears an invalid session and redirects to login.
+    });
+
+    return () => { isCurrent = false; };
+  }, [token]);
+
   const login = async (username: string, password: string) => {
     const res = await authApi.login(username, password);
     const { access_token, user: u } = res.data;
