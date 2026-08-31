@@ -21,3 +21,15 @@ def test_migration_contains_batch_index_and_foreign_keys():
     assert "uq_batch_site_product_upd_expiry" in sql
     assert 'sa.ForeignKey("sites.id")' in sql
     assert 'sa.ForeignKey("import_runs.id")' in sql
+
+
+def test_legacy_primary_admin_is_promoted_only_when_superadmin_is_missing():
+    migration = Path(__file__).parents[1].joinpath(
+        "alembic", "versions", "20260831_02_promote_legacy_superadmin.py"
+    )
+    sql = migration.read_text(encoding="utf-8")
+
+    assert "NOT EXISTS (" in sql
+    assert "role = 'superadmin'" in sql
+    assert "role = 'admin'" in sql
+    assert "is_active = true" in sql
