@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     # Notification schedule
     NOTIFICATION_TIME: str = "09:00"          # HH:MM
     NOTIFICATION_BASE_DAY: str = "sunday"
-    NOTIFICATION_MAX_PER_WEEK: int = 6
 
     class Config:
         env_file = ".env"

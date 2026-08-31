@@ -214,5 +214,4 @@ async def get_config(_: object = Depends(_notification_sender)):
         "planned_threshold_days": settings.EXPIRY_PLANNED_THRESHOLD,
         "notification_time": settings.NOTIFICATION_TIME,
         "base_day": settings.NOTIFICATION_BASE_DAY,
-        "max_per_week": settings.NOTIFICATION_MAX_PER_WEEK,
     }

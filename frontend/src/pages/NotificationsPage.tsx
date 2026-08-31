@@ -3,7 +3,7 @@ import { notificationsApi } from '../api';
 import { Card, Loading, T } from '../components/common/UI';
 import { useSite } from '../hooks/useSite';
 
-interface Config { urgent_threshold_days: number; planned_threshold_days: number; notification_time: string; base_day: string; max_per_week: number; }
+interface Config { urgent_threshold_days: number; planned_threshold_days: number; notification_time: string; base_day: string; }
 interface Result { sent: number; recipients: string[]; products_included: number; }
 
 export default function NotificationsPage() {
@@ -37,7 +37,6 @@ export default function NotificationsPage() {
               { label: 'Срочный порог', value: `${config.urgent_threshold_days} дн.` },
               { label: 'Плановый порог', value: `${config.planned_threshold_days} дн.` },
               { label: 'Время рассылки', value: config.notification_time },
-              { label: 'Макс. в неделю', value: String(config.max_per_week) },
             ].map(({ label, value }) => (
               <div key={label} style={{ background: T.bg, borderRadius: 8, padding: '10px 12px' }}>
                 <div style={{ fontSize: 11, color: T.muted, marginBottom: 2 }}>{label}</div>
@@ -73,7 +72,7 @@ export default function NotificationsPage() {
             <div style={{ fontWeight: 700, fontSize: 15, color: '#D97706', marginBottom: 4 }}>📋 Плановые уведомления</div>
             <div style={{ fontSize: 13, color: T.sub }}>
               Продукты и партии со сроком от 16 до {config?.planned_threshold_days ?? 45} дней.
-              До {config?.max_per_week ?? 6} раз в неделю, базовый день — воскресенье.
+              Отправляется раз в неделю, базовый день — воскресенье.
             </div>
           </div>
           <button onClick={() => trigger('planned')} disabled={loading !== null}

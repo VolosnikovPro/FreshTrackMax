@@ -55,3 +55,10 @@ def test_application_registers_notification_scheduler(seeded_client):
     from main import app
 
     assert app.state.notification_scheduler_task is not None
+
+
+def test_notification_config_has_no_unapproved_weekly_limit(seeded_client, auth_header):
+    response = seeded_client.get("/api/notifications/config", headers=auth_header)
+
+    assert response.status_code == 200
+    assert "max_per_week" not in response.json()

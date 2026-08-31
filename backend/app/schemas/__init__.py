@@ -272,7 +272,6 @@ class AdminSummary(BaseModel):
 class NotificationConfig(BaseModel):
     notification_time: str = "09:00"
     base_day: str = "sunday"
-    max_per_week: int = 6
 
 
 class NotificationTriggerResponse(BaseModel):
