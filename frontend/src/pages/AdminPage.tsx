@@ -24,7 +24,7 @@ const ROLE_COLORS: Record<UserRole, 'blue' | 'green' | 'yellow' | 'gray'> = {
 };
 const IMPORT_TYPES = [
   { value: 'risk_report', label: 'Риск-Отчет (партии + сроки)' },
-  { value: 'cost_sheet', label: 'Себестоимость расхода сырья' },
+  { value: 'cost_sheet', label: 'Цены и стоимость сырья' },
   { value: 'consumption_file', label: 'Расход сырья (FEFO, атомарно)' },
 ];
 
@@ -387,7 +387,7 @@ export default function AdminPage() {
             <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 8 }}>Поддерживаемые форматы</div>
             <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.7 }}>
               <div>• <b>Риск-Отчет</b> — колонки: Наименование товаров, Ед. Изм., Количество, Срок годности</div>
-              <div>• <b>Себестоимость</b> — строка 5 с заголовком Код / Товар / Ед. изм. / Цена, данные с 7-й строки</div>
+              <div>• <b>Цены и стоимость</b> — строка 5 с заголовком Код / Товар / Ед. изм. / Цена, данные с 7-й строки</div>
             </div>
           </Card>
         </div>

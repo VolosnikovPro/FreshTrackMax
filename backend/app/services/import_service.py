@@ -6,7 +6,7 @@ Supports two file formats:
      Columns: Склад | Наименование товаров | Ед. Изм. | Количество |
               Срок годности | Текущая дата | Осталось дней | Комментарии
 
-  2. Cost/Consumption sheet (Себестоимость расхода сырья)
+  2. Price / cost sheet (Цены и стоимость сырья)
      Row 5 header: Код | Товар | Ед. изм. | Цена | (balance) | day1 | day2 ...
      Data starts at row 7.
 
@@ -24,7 +24,7 @@ from typing import Optional
 
 import openpyxl
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models.product import Product
 from app.models.batch import Batch
@@ -112,17 +112,11 @@ async def _get_or_create_product(
     unit: str,
     sku: Optional[str] = None,
 ) -> tuple[Product, bool]:
-    """Find existing product by name (case-insensitive) within site or create new."""
-    name = name.strip()
-    unit = unit.strip() or "шт"
+    """Find an existing product by trimmed name within the site or create new."""
+    name = _clean_str(name)
+    unit = _clean_str(unit) or "шт"
 
-    result = await db.execute(
-        select(Product).where(
-            Product.site_id == site_id,
-            Product.name.ilike(name)
-        )
-    )
-    product = result.scalar_one_or_none()
+    product = await _find_product(db, site_id, name)
 
     if product is None:
         product = Product(site_id=site_id, name=name, unit=unit, sku=sku, is_active=True)
@@ -131,6 +125,18 @@ async def _get_or_create_product(
         return product, True
 
     return product, False
+
+
+async def _find_product(db: AsyncSession, site_id: int, name: str) -> Optional[Product]:
+    """Find a product after trimming outer whitespace on both sides of the match."""
+    normalized_name = _clean_str(name)
+    result = await db.execute(
+        select(Product).where(
+            Product.site_id == site_id,
+            func.trim(Product.name) == normalized_name,
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 def _record_import_change(
@@ -286,7 +292,7 @@ async def import_cost_sheet(
     import_run_id: Optional[int] = None,
 ) -> ImportResult:
     """
-    Parse Себестоимость расхода сырья xlsx.
+    Parse the price and cost xlsx format.
 
     Layout:
       Row 1 — location / empty
@@ -304,24 +310,34 @@ async def import_cost_sheet(
     result = ImportResult()
     today = effective_date or datetime.date.today()
 
-    # Find the right sheet
-    sheet_name = next(
-        (s for s in wb.sheetnames if "расход" in s.lower()),
-        wb.sheetnames[0]
-    )
-    ws = wb[sheet_name]
-    rows = list(ws.iter_rows(values_only=True))
-
-    # Find header row with "Товар" or "Код"
+    # Find the first visible sheet with price headers. Worksheet names are not
+    # part of the import contract, and hidden helper sheets must be ignored.
+    ws = None
+    rows = []
     header_idx = None
-    for i, row in enumerate(rows):
-        cells = [_clean_str(c).lower() for c in row if c is not None]
-        if "товар" in cells or "код" in cells:
-            header_idx = i
+    for candidate in wb.worksheets:
+        if candidate.sheet_state != "visible":
+            continue
+        candidate_rows = list(candidate.iter_rows(values_only=True))
+        for i, row in enumerate(candidate_rows):
+            cells = [_clean_str(c).lower() for c in row if c is not None]
+            has_price = any("цена" in cell for cell in cells)
+            has_product_or_code = any(
+                cell in ("товар", "наименование", "код") for cell in cells
+            )
+            if has_price and has_product_or_code:
+                ws = candidate
+                rows = candidate_rows
+                header_idx = i
+                break
+        if ws is not None:
             break
 
-    if header_idx is None:
-        result.add_error("Строка заголовков не найдена (ожидается 'Товар' / 'Код')")
+    if ws is None or header_idx is None:
+        result.add_error(
+            "Лист с ценами не найден: нужен видимый лист с колонками "
+            "'Товар' или 'Код' и 'Цена'"
+        )
         return result
 
     header = [_clean_str(c).lower() for c in rows[header_idx]]
@@ -571,19 +587,23 @@ async def import_consumption_file(db, wb, site_id: int, updated_by: Optional[int
     if canonical:
         pos = {h: i for i, h in enumerate(headers)}
         for n, row in enumerate(rows[1:], 2):
+            if not any(_clean_str(value) for value in row):
+                continue
             d = _excel_serial_to_date(row[pos["дата"]] if pos["дата"] < len(row) else None)
             qty = _clean_float(row[pos["количество"]] if pos["количество"] < len(row) else None)
             name = _clean_str(row[pos.get("товар", pos.get("наименование", -1))]) if pos.get("товар", pos.get("наименование", -1)) >= 0 else ""
             if not d or not qty or qty <= 0 or not name:
                 result.add_error(f"Строка {n}: дата, товар и положительное количество обязательны")
                 continue
-            product = (await db.execute(select(Product).where(Product.site_id == site_id, Product.name == name))).scalar_one_or_none()
+            product = await _find_product(db, site_id, name)
             if not product:
                 result.add_error(f"Строка {n}: товар не найден на объекте: {name}")
                 continue
             operations.append((d, product, qty, _clean_str(row[pos.get("ед. изм.", -1)]) or product.unit))
     else:
         result.add_error("Ожидается заголовок Дата | Товар | Количество")
+    if not operations and not result.errors:
+        result.add_error("В файле нет заполненных строк расхода")
     if result.errors:
         return result
     for d, product, qty, unit in operations:

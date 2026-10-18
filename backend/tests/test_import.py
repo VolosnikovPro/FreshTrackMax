@@ -73,6 +73,40 @@ def test_import_cost_sheet_creates_costs(seeded_client, auth_header, tmp_path):
     assert "Сахар" in names and "Мука" in names
 
 
+def test_import_cost_sheet_ignores_hidden_empty_sheet(seeded_client, auth_header, tmp_path):
+    wb = Workbook()
+    hidden = wb.active
+    hidden.title = "Лист1"
+    hidden.sheet_state = "hidden"
+    ws = wb.create_sheet("Сроки ТЕСТ")
+    ws.append([])
+    ws.append([])
+    ws.append([])
+    ws.append([])
+    ws.append(["Код", "Товар", "Ед. изм.", "Цена"])
+    ws.append([])
+    ws.append([1, "Сахар", "кг", 120])
+    ws.append([2, "Мука", "кг", 80])
+    path = tmp_path / "prices-hidden-first-sheet.xlsx"
+    wb.save(path)
+
+    with path.open("rb") as stream:
+        response = seeded_client.post(
+            "/api/sheets/import/file?import_type=cost_sheet",
+            headers=auth_header,
+            files={
+                "file": (
+                    path.name,
+                    stream,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["imported"] == 2
+
+
 def test_import_invalid_type_rejected(seeded_client, auth_header, tmp_path):
     _make_risk_xlsx(tmp_path / "risk.xlsx")
     with open(tmp_path / "risk.xlsx", "rb") as f:
@@ -129,6 +163,104 @@ def test_consumption_file_is_atomic_fefo_and_duplicate_protected(seeded_client, 
     with path.open("rb") as stream:
         replay_without_confirmation = seeded_client.post("/api/sheets/import/file?import_type=consumption_file", headers=auth_header, files={"file": (path.name, stream, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
     assert replay_without_confirmation.status_code == 409
+
+
+def test_consumption_file_ignores_blank_rows(seeded_client, auth_header, make_future_date, tmp_path):
+    seeded_client.post(
+        "/api/admin/users",
+        headers=auth_header,
+        json={"username": "klad-blank-rows", "role": "storekeeper", "password": "pass"},
+    )
+    token = seeded_client.post(
+        "/api/auth/login", json={"username": "klad-blank-rows", "password": "pass"}
+    ).json()["access_token"]
+    storekeeper_header = {"Authorization": f"Bearer {token}"}
+    product = seeded_client.post(
+        "/api/products/",
+        headers=storekeeper_header,
+        json={"name": "Пустые строки тест", "unit": "кг"},
+    ).json()
+    seeded_client.post(
+        "/api/batches/",
+        headers=storekeeper_header,
+        json={
+            "product_id": product["id"],
+            "quantity": 5,
+            "unit": "кг",
+            "expiry_date": make_future_date(10),
+        },
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Дата", "Товар", "Ед. изм.", "Количество"])
+    ws.append([date.today(), "Пустые строки тест", "кг", 2])
+    ws["D6"].number_format = "0.00"  # A formatted blank tail extends the sheet range.
+    ws["A6"] = "   "  # Whitespace-only rows are blank for import purposes.
+    path = tmp_path / "consumption-blank-rows.xlsx"
+    wb.save(path)
+
+    with path.open("rb") as stream:
+        response = seeded_client.post(
+            "/api/sheets/import/file?import_type=consumption_file",
+            headers=storekeeper_header,
+            files={
+                "file": (
+                    path.name,
+                    stream,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["imported"] == 1
+
+
+def test_consumption_file_matches_product_with_outer_spaces_in_database(
+    seeded_client, auth_header, make_future_date, tmp_path
+):
+    """Import should find legacy product names with outer whitespace."""
+    seeded_client.post(
+        "/api/admin/users",
+        headers=auth_header,
+        json={"username": "klad-trim-db", "role": "storekeeper", "password": "pass"},
+    )
+    token = seeded_client.post(
+        "/api/auth/login", json={"username": "klad-trim-db", "password": "pass"}
+    ).json()["access_token"]
+    header = {"Authorization": f"Bearer {token}"}
+
+    product = seeded_client.post(
+        "/api/products/", headers=header, json={"name": "  Мука с пробелами  ", "unit": "кг"}
+    ).json()
+    assert product["name"] == "  Мука с пробелами  "
+    seeded_client.post(
+        "/api/batches/",
+        headers=header,
+        json={
+            "product_id": product["id"],
+            "quantity": 5,
+            "unit": "кг",
+            "expiry_date": make_future_date(10),
+        },
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Дата", "Товар", "Ед. изм.", "Количество"])
+    ws.append([date.today(), "Мука с пробелами", "кг", 2])
+    path = tmp_path / "trim-consumption.xlsx"
+    wb.save(path)
+
+    with path.open("rb") as stream:
+        response = seeded_client.post(
+            "/api/sheets/import/file?import_type=consumption_file",
+            headers=header,
+            files={"file": (path.name, stream, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+
+    assert response.status_code == 200, response.text
 
 
 def test_audit_xlsx_serializes_import_json(seeded_client, auth_header, tmp_path):

@@ -7,7 +7,7 @@ import { useSite } from '../hooks/useSite';
 
 const ADMIN_TYPES = [
   { value: 'risk_report', label: 'Риск-отчет' },
-  { value: 'cost_sheet', label: 'Legacy: цены и остатки' },
+  { value: 'cost_sheet', label: 'Цены и стоимость сырья' },
 ];
 
 export default function ImportPage() {

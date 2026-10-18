@@ -31,7 +31,7 @@ _writer = require_roles(UserRole.superadmin, UserRole.admin, UserRole.storekeepe
 
 IMPORT_TYPES = {
     "risk_report": "Риск-Отчет (продукты + партии + сроки годности)",
-    "cost_sheet":  "Себестоимость расхода сырья (цены + остатки)",
+    "cost_sheet":  "Цены и стоимость сырья",
     "consumption_file": "Расход сырья (атомарное FEFO-списание)",
 }
 
@@ -90,7 +90,7 @@ async def import_from_file(
 
     import_type:
       - risk_report  — Риск-Отчет (продукты, партии, сроки годности)
-      - cost_sheet   — Себестоимость расхода сырья (цены, остатки)
+      - cost_sheet   — Цены и стоимость сырья (цены, остатки)
     """
     if import_type not in IMPORT_TYPES:
         raise HTTPException(
