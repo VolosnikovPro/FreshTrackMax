@@ -72,7 +72,7 @@ async def create_headcount(
         await db.refresh(entry)
         return entry
 
-    entry = DailyHeadcount(**data.model_dump(), site_id=site_id, entered_by=current_user.id)
+    entry = DailyHeadcount(**data.model_dump(exclude={"site_id"}), site_id=site_id, entered_by=current_user.id)
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
