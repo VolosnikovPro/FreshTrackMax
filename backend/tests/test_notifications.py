@@ -27,6 +27,8 @@ def test_trigger_urgent_logs_to_db(seeded_client, auth_header, make_future_date)
     log = logs[0]
     assert log["notification_type"] == "urgent"
     assert log["products_count"] == 1
+    assert log["message_text"].startswith("Объект: Тестовый объект\n\n")
+    assert "Сыр срочный" in log["message_text"]
 
 
 def test_trigger_planned_logs_to_db(seeded_client, auth_header, make_future_date):
@@ -38,7 +40,9 @@ def test_trigger_planned_logs_to_db(seeded_client, auth_header, make_future_date
     assert resp.json()["products_included"] >= 1
 
     logs = seeded_client.get("/api/notifications/logs", headers=auth_header).json()
-    assert any(l["notification_type"] == "planned" for l in logs)
+    planned_log = next(l for l in logs if l["notification_type"] == "planned")
+    assert planned_log["message_text"].startswith("Объект: Тестовый объект\n\n")
+    assert "Масло плановое" in planned_log["message_text"]
 
 
 def test_logs_empty_when_no_batches(seeded_client, auth_header):

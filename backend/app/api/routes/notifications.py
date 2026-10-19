@@ -45,8 +45,8 @@ async def _send_max_message(max_user_id: str, text: str) -> bool:
         return False
 
 
-def _format_batch_list(batches: List[Batch], title: str) -> str:
-    lines = [f"🔔 {title}\n"]
+def _format_batch_list(batches: List[Batch], title: str, site_name: str) -> str:
+    lines = [f"Объект: {site_name}\n", f"🔔 {title}\n"]
     for b in batches:
         lines.append(
             f"• {b.product.name} | {b.quantity} {b.unit} | "
@@ -80,7 +80,8 @@ async def trigger_notifications(
     if not batches:
         return NotificationTriggerResponse(sent=0, recipients=[], products_included=0)
 
-    message = _format_batch_list(batches, title)
+    site = await db.get(Site, site_id)
+    message = _format_batch_list(batches, title, site.name)
     notification_type = NotificationType.urgent if threshold_days == settings.EXPIRY_URGENT_THRESHOLD else NotificationType.planned
 
     users_result = await db.execute(
